@@ -20,7 +20,7 @@ def test_is_duplicate_false_for_new_hash(tmp_config):
 def test_save_and_retrieve_document(tmp_config):
     storage.init_db(tmp_config)
     doc_id = storage.save_document(
-        tmp_config, entity="goodhold", doc_type="receipt",
+        tmp_config, entity="acme", doc_type="receipt",
         issuer="Towngas", doc_date="2026-04-01", currency="HKD",
         total=1200.0, file_hash_val="deadbeef",
         original_path="/tmp/bill.pdf", summary="Gas bill April"
@@ -30,19 +30,19 @@ def test_save_and_retrieve_document(tmp_config):
 
     docs = storage.get_documents(tmp_config)
     assert len(docs) == 1
-    assert docs[0]["entity"] == "goodhold"
+    assert docs[0]["entity"] == "acme"
     assert docs[0]["total"] == 1200.0
 
 
 def test_save_and_query_transactions(tmp_config):
     storage.init_db(tmp_config)
     doc_id = storage.save_document(
-        tmp_config, entity="goodhold", doc_type="receipt",
+        tmp_config, entity="acme", doc_type="receipt",
         issuer="CLP", doc_date="2026-04-10", currency="HKD",
         total=800.0, file_hash_val="aabbcc",
         original_path="/tmp/clp.jpg", summary="Electric bill"
     )
-    storage.save_transactions(tmp_config, doc_id, "goodhold", [
+    storage.save_transactions(tmp_config, doc_id, "acme", [
         {"date": "2026-04-10", "merchant": "CLP Power", "amount": 800.0,
          "currency": "HKD", "category": "utilities", "direction": "expense"},
     ])
@@ -50,10 +50,10 @@ def test_save_and_query_transactions(tmp_config):
     assert len(txns) == 1
     assert txns[0]["merchant"] == "CLP Power"
 
-    filtered = storage.get_transactions(tmp_config, entity="goodhold", month="2026-04")
+    filtered = storage.get_transactions(tmp_config, entity="acme", month="2026-04")
     assert len(filtered) == 1
 
-    no_match = storage.get_transactions(tmp_config, entity="adelainec")
+    no_match = storage.get_transactions(tmp_config, entity="globex")
     assert len(no_match) == 0
 
 

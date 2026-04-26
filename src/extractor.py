@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,13 +11,29 @@ import anthropic
 
 from .config import Config
 
-CLAUDE_BIN = "/Users/eiko/.local/bin/claude"
+_IMAGE_TYPES = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".png": "image/png", ".webp": "image/webp",
+}
 
-EXTRACTION_PROMPT = """You are a financial document reader. Extract structured data from the document.
+
+def _claude_bin() -> str:
+    found = shutil.which("claude")
+    if found:
+        return found
+    for p in [Path.home() / ".local/bin/claude", Path("/usr/local/bin/claude")]:
+        if p.exists():
+            return str(p)
+    raise RuntimeError("claude CLI not found — install it or set extraction_mode to 'api'")
+
+
+def _build_prompt(entities: list[str]) -> str:
+    entity_list = ", ".join(entities) if entities else "unknown"
+    return f"""You are a financial document reader. Extract structured data from the document.
 
 Return ONLY valid JSON — no markdown fences, no extra text:
-{
-  "entity": "one of: goodhold, thousand_ford, santo_star, anrobo, adelainec, or null if uncertain",
+{{
+  "entity": "one of: {entity_list}, or null if uncertain",
   "entity_confidence": "high or low",
   "doc_type": "statement, receipt, invoice, insurance, or unknown",
   "issuer": "institution or merchant name as string",
@@ -24,7 +41,7 @@ Return ONLY valid JSON — no markdown fences, no extra text:
   "currency": "3-letter code e.g. HKD",
   "total": 0.00,
   "transactions": [
-    {
+    {{
       "date": "YYYY-MM-DD",
       "merchant": "name",
       "amount": 0.00,
@@ -32,10 +49,10 @@ Return ONLY valid JSON — no markdown fences, no extra text:
       "category": "rent, utilities, insurance, management, rewards, or misc",
       "direction": "income or expense",
       "notes": "optional string or null"
-    }
+    }}
   ],
   "summary": "2-3 sentence markdown summary of the document"
-}
+}}
 
 Category rules:
 - "rent": rental income received or rent paid
@@ -50,19 +67,7 @@ Direction rules — read these carefully:
 - "expense": ALL payments going out — purchases, bills, fees, and ALSO credit card autopay payments (even if labeled "autopay" or "payment received")
 - Credit card autopay / bill payments are EXPENSES (money leaving the account to pay a card or bill)
 - Small bank credits labeled as rebate, cashback, reward, or bonus → direction "income", category "rewards"
-- Always use POSITIVE amounts regardless of whether the statement shows debits as negative
-
-Entity hints:
-- goodhold: Goodhold Limited, unit 706, Hung Hom commercial
-- thousand_ford: Thousand Ford, unit 607, Hung Hom commercial
-- santo_star: Santo Star Limited, AI/tech
-- anrobo: AnRobo, robotics
-- adelainec: AdelaineC, Vedic astrology"""
-
-_IMAGE_TYPES = {
-    ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-    ".png": "image/png", ".webp": "image/webp",
-}
+- Always use POSITIVE amounts regardless of whether the statement shows debits as negative"""
 
 
 @dataclass
@@ -82,13 +87,13 @@ class ExtractionResult:
 def extract_document(config: Config, file_path: Path) -> ExtractionResult:
     if config.extraction_mode == "api":
         return _extract_via_api(config, file_path)
-    return _extract_via_oauth(file_path)
+    return _extract_via_oauth(config, file_path)
 
 
-def _extract_via_oauth(file_path: Path) -> ExtractionResult:
-    prompt = f"Read {file_path}\n\n{EXTRACTION_PROMPT}"
+def _extract_via_oauth(config: Config, file_path: Path) -> ExtractionResult:
+    prompt = f"Read {file_path}\n\n{_build_prompt(config.entities)}"
     result = subprocess.run(
-        [CLAUDE_BIN, "--print", "--dangerously-skip-permissions", prompt],
+        [_claude_bin(), "--print", "--dangerously-skip-permissions", prompt],
         capture_output=True, text=True, timeout=120,
     )
     if result.returncode != 0:
@@ -116,7 +121,7 @@ def _extract_via_api(config: Config, file_path: Path) -> ExtractionResult:
         max_tokens=2048,
         messages=[{"role": "user", "content": [
             media_block,
-            {"type": "text", "text": EXTRACTION_PROMPT},
+            {"type": "text", "text": _build_prompt(config.entities)},
         ]}],
     )
     return _parse_response(response.content[0].text)

@@ -1,10 +1,10 @@
 from src.extractor import ExtractionResult
 from src.classifier import classify
 
-ENTITIES = ["goodhold", "thousand_ford", "santo_star", "anrobo", "adelainec"]
+ENTITIES = ["acme", "globex"]
 
 
-def _result(entity="goodhold", confidence="high", transactions=None):
+def _result(entity="acme", confidence="high", transactions=None):
     return ExtractionResult(
         entity=entity, entity_confidence=confidence, doc_type="receipt",
         issuer="Test", doc_date="2026-04-01", currency="HKD", total=100.0,
@@ -13,8 +13,8 @@ def _result(entity="goodhold", confidence="high", transactions=None):
 
 
 def test_known_entity_unchanged():
-    r = classify(_result("goodhold", "high"), ENTITIES)
-    assert r.entity == "goodhold"
+    r = classify(_result("acme", "high"), ENTITIES)
+    assert r.entity == "acme"
     assert r.entity_confidence == "high"
 
 
@@ -37,7 +37,7 @@ def test_invalid_direction_becomes_expense():
 
 
 def test_valid_categories_unchanged():
-    for cat in ("rent", "utilities", "insurance", "management", "income", "misc"):
+    for cat in ("rent", "utilities", "insurance", "management", "rewards", "misc"):
         txns = [{"category": cat, "direction": "expense", "amount": 10}]
         r = classify(_result(transactions=txns), ENTITIES)
         assert r.transactions[0]["category"] == cat

@@ -6,7 +6,8 @@ from src.config import Config
 def test_config_defaults():
     c = Config()
     assert c.web_port == 8095
-    assert "goodhold" in c.entities
+    assert isinstance(c.entities, list)
+    assert len(c.entities) > 0
     assert c.extraction_mode == "oauth"
 
 

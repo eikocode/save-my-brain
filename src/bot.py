@@ -25,7 +25,7 @@ _sessions: dict[str, dict] = {}
 
 def _entity_keyboard(session_key: str, entities: list[str] | None = None) -> InlineKeyboardMarkup:
     if entities is None:
-        entities = ["goodhold", "thousand_ford", "santo_star", "anrobo", "adelainec"]
+        entities = []
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=e, callback_data=f"entity:{session_key}:{e}")]
         for e in entities

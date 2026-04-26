@@ -6,11 +6,11 @@ from src import exporter, storage
 def _seed_db(config):
     storage.init_db(config)
     doc_id = storage.save_document(
-        config, entity="goodhold", doc_type="receipt", issuer="CLP",
+        config, entity="acme", doc_type="receipt", issuer="CLP",
         doc_date="2026-04-10", currency="HKD", total=800.0,
         file_hash_val="aabbcc", original_path="/tmp/clp.jpg", summary="Electric"
     )
-    storage.save_transactions(config, doc_id, "goodhold", [
+    storage.save_transactions(config, doc_id, "acme", [
         {"date": "2026-04-10", "merchant": "CLP Power", "amount": 800.0,
          "currency": "HKD", "category": "utilities", "direction": "expense"},
     ])
@@ -43,7 +43,7 @@ def test_export_csv_row_content(tmp_config, tmp_path):
     with path.open() as f:
         rows = list(csv.DictReader(f))
     assert len(rows) == 1
-    assert rows[0]["entity"] == "goodhold"
+    assert rows[0]["entity"] == "acme"
     assert rows[0]["merchant"] == "CLP Power"
     assert rows[0]["issuer"] == "CLP"
 

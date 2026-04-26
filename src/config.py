@@ -11,9 +11,7 @@ CONFIG_PATH = Path.home() / ".savemybrain" / "config.json"
 class Config:
     inbox_folder: str = str(Path.home() / "Desktop" / "SavemyBrain Inbox")
     output_folder: str = str(Path.home() / "Dropbox" / "SavemyBrain")
-    entities: list[str] = field(default_factory=lambda: [
-        "goodhold", "thousand_ford", "santo_star", "anrobo", "adelainec"
-    ])
+    entities: list[str] = field(default_factory=lambda: ["company_a", "company_b"])
     anthropic_api_key: str = ""
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""

@@ -8,7 +8,7 @@ def tmp_config(tmp_path):
     return Config(
         inbox_folder=str(tmp_path / "inbox"),
         output_folder=str(tmp_path / "output"),
-        entities=["goodhold", "thousand_ford", "santo_star", "anrobo", "adelainec"],
+        entities=["acme", "globex"],
         anthropic_api_key="test-key",
         telegram_bot_token="",
         telegram_chat_id="",
