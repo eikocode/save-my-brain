@@ -128,6 +128,12 @@ def get_documents(config: Config, limit: int | None = None) -> list[dict]:
         return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
+def delete_document(config: Config, doc_id: int) -> None:
+    with get_db(config) as conn:
+        conn.execute("DELETE FROM transactions WHERE document_id = ?", (doc_id,))
+        conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+
+
 def get_transactions(config: Config, entity: str = None, month: str = None,
                      category: str = None, direction: str = None) -> list[dict]:
     sql = "SELECT * FROM transactions WHERE 1=1"

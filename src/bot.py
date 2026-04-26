@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,46 +21,34 @@ from . import storage
 
 log = logging.getLogger(__name__)
 router = Router()
-_sessions: dict[str, dict] = {}
+
+_DELETE_KEYWORDS = re.compile(r"\b(delete|remove|erase|discard|trash)\b", re.I)
 
 
-def _entity_keyboard(session_key: str, entities: list[str] | None = None) -> InlineKeyboardMarkup:
-    if entities is None:
-        entities = []
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=e, callback_data=f"entity:{session_key}:{e}")]
-        for e in entities
-    ])
+def _entity_from_result(result: ExtractionResult) -> str:
+    """Auto-detect entity from issuer name — no user input needed."""
+    if result.entity and result.entity_confidence == "high":
+        return result.entity
+    if result.issuer:
+        return re.sub(r"[^a-z0-9]+", "_", result.issuer.lower()).strip("_")
+    return "unknown"
 
 
-def _action_keyboard(session_key: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="✅ Save", callback_data=f"save:{session_key}"),
-            InlineKeyboardButton(text="🗑️ Discard", callback_data=f"discard:{session_key}"),
-        ],
-        [
-            InlineKeyboardButton(text="📋 Preview transactions", callback_data=f"preview:{session_key}"),
-            InlineKeyboardButton(text="✏️ Change entity", callback_data=f"change:{session_key}"),
-        ],
-    ])
-
-
-def _result_text(result: ExtractionResult, entity: str, confirmed: bool = False) -> str:
-    if confirmed:
-        confidence = "(confirmed)"
-    elif result.entity_confidence == "high":
-        confidence = "(auto-detected)"
-    else:
-        confidence = "(guessed)"
-    entity_display = entity.replace("_", " ").title()
+def _saved_text(result: ExtractionResult, entity: str, n_txns: int) -> str:
     return (
-        f"✅ *{result.doc_type.title()} detected*\n"
+        f"✅ *Saved automatically*\n\n"
+        f"📄 {result.doc_type.title()} · {result.issuer}\n"
         f"📅 {result.doc_date} · {result.currency} {result.total:,.2f}\n"
-        f"🏢 {result.issuer}\n"
-        f"🏠 Entity: {entity_display} {confidence}\n"
-        f"📂 Transactions: {len(result.transactions)}"
+        f"📂 {n_txns} transaction(s) stored\n\n"
+        f"_Say \"delete this\" anytime to remove it._"
     )
+
+
+def _delete_keyboard(doc_ids: list[int]) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"🗑️ Delete #{doc_id}", callback_data=f"del:{doc_id}")]
+        for doc_id in doc_ids
+    ])
 
 
 @router.message(F.document | F.photo)
@@ -78,15 +67,13 @@ async def handle_doc(message: Message, config: Config) -> None:
     if storage.is_duplicate(config, h):
         orig = storage.get_document_by_hash(config, h)
         if orig:
-            entity_display = (orig.get("entity") or "unknown").replace("_", " ").title()
             date_saved = (orig.get("created_at") or "")[:10]
             await message.reply(
                 f"⚠️ *Already saved* — this file was processed before.\n\n"
                 f"📅 Saved on: {date_saved}\n"
-                f"📄 Type: {orig.get('doc_type', '?').title()}\n"
-                f"🏢 Issuer: {orig.get('issuer') or '?'}\n"
-                f"🏠 Entity: {entity_display}\n"
-                f"💰 Total: {orig.get('currency', 'HKD')} {orig.get('total', 0):,.2f}",
+                f"📄 {orig.get('doc_type', '?').title()} · {orig.get('issuer') or '?'}\n"
+                f"💰 {orig.get('currency', 'HKD')} {orig.get('total', 0):,.2f}\n\n"
+                f"_Say \"delete this\" if you want to remove it._",
                 parse_mode="Markdown",
             )
         else:
@@ -94,7 +81,7 @@ async def handle_doc(message: Message, config: Config) -> None:
         tmp_path.unlink(missing_ok=True)
         return
 
-    # Send first-page preview before extraction
+    # Preview while extracting
     preview_bytes = render_pdf_preview(tmp_path)
     if preview_bytes:
         from aiogram.types import BufferedInputFile
@@ -104,124 +91,48 @@ async def handle_doc(message: Message, config: Config) -> None:
         )
     else:
         await message.reply("⏳ Reading document…")
+
     try:
         result = extract_document(config, tmp_path)
     except Exception as e:
         tmp_path.unlink(missing_ok=True)
-        await message.reply(f"❌ Extraction failed: {e}")
+        await message.reply(f"❌ Could not read this document: {e}")
         return
+
     classify(result, config.entities)
+    tmp_path.unlink(missing_ok=True)
 
     if result.doc_type == "unknown" and not result.issuer and result.total == 0:
-        tmp_path.unlink(missing_ok=True)
         await message.reply(
-            "❌ Could not read this document.\n\n"
-            "If you're using OAuth mode, try switching to API mode in `configure.py` "
-            "(set an Anthropic API key). PDFs work best in API mode."
+            "❌ Could not extract any data from this document.\n"
+            "Try a clearer scan or a different file."
         )
         return
 
-    # Evict sessions older than 1 hour to prevent memory/disk leaks from abandoned flows
-    cutoff = datetime.now(timezone.utc).timestamp() - 3600
-    stale = [k for k, v in _sessions.items() if v.get("ts", 0) < cutoff]
-    for k in stale:
-        if p := _sessions.pop(k, {}).get("tmp_path"):
-            Path(p).unlink(missing_ok=True)
-
-    session_key = str(message.message_id)
-    _sessions[session_key] = {
-        "result": result, "tmp_path": tmp_path, "hash": h, "entity": result.entity,
-        "ts": datetime.now(timezone.utc).timestamp(),
-    }
-
-    text = _result_text(result, result.entity or "unknown")
-    if not result.entity or result.entity_confidence == "low":
-        await message.reply(
-            text + "\n\n❓ *Which entity is this for?*",
-            parse_mode="Markdown",
-            reply_markup=_entity_keyboard(session_key, config.entities),
-        )
-    else:
-        await message.reply(text, parse_mode="Markdown",
-                            reply_markup=_action_keyboard(session_key))
-
-
-@router.callback_query(F.data.startswith("entity:"))
-async def cb_entity(cq: CallbackQuery, config: Config) -> None:
-    _, session_key, entity = cq.data.split(":", 2)
-    if session_key not in _sessions:
-        await cq.answer("Session expired.")
-        return
-    _sessions[session_key]["entity"] = entity
-    result = _sessions[session_key]["result"]
-    await cq.message.edit_text(
-        _result_text(result, entity, confirmed=True), parse_mode="Markdown",
-        reply_markup=_action_keyboard(session_key),
-    )
-    await cq.answer()
-
-
-@router.callback_query(F.data.startswith("save:"))
-async def cb_save(cq: CallbackQuery, config: Config) -> None:
-    _, session_key = cq.data.split(":", 1)
-    if session_key not in _sessions:
-        await cq.answer("Session expired.")
-        return
-    sess = _sessions.pop(session_key)
-    result, tmp_path, h, entity = (
-        sess["result"], Path(sess["tmp_path"]), sess["hash"], sess["entity"]
-    )
-    if not entity:
-        await cq.answer("Please select an entity first.")
-        return
+    # Auto-detect entity and save immediately — no user input needed
+    entity = _entity_from_result(result)
     doc_id = storage.save_document(
         config, entity, result.doc_type, result.issuer, result.doc_date,
-        result.currency, result.total, h, str(tmp_path), result.summary,
+        result.currency, result.total, h, fname, result.summary,
     )
     storage.save_transactions(config, doc_id, entity, result.transactions)
-    tmp_path.unlink(missing_ok=True)
-    await cq.message.edit_text(f"✅ Saved — {len(result.transactions)} transaction(s) stored.")
-    await cq.answer()
 
-
-@router.callback_query(F.data.startswith("preview:"))
-async def cb_preview(cq: CallbackQuery) -> None:
-    _, session_key = cq.data.split(":", 1)
-    if session_key not in _sessions:
-        await cq.answer("Session expired.")
-        return
-    result = _sessions[session_key]["result"]
-    if not result.transactions:
-        await cq.answer("No transactions extracted.")
-        return
-    title = f"{result.issuer}  ·  {len(result.transactions)} transactions"
-    img_bytes = render_transactions(result.transactions, title=title)
-    from aiogram.types import BufferedInputFile
-    await cq.message.reply_photo(
-        photo=BufferedInputFile(img_bytes, filename="transactions.png"),
-        caption=f"📋 *{title}*",
+    await message.reply(
+        _saved_text(result, entity, len(result.transactions)),
         parse_mode="Markdown",
     )
-    await cq.answer()
 
 
-@router.callback_query(F.data.startswith("change:"))
-async def cb_change(cq: CallbackQuery, config: Config) -> None:
-    _, session_key = cq.data.split(":", 1)
-    if session_key not in _sessions:
-        await cq.answer("Session expired.")
+@router.callback_query(F.data.startswith("del:"))
+async def cb_delete(cq: CallbackQuery, config: Config) -> None:
+    _, doc_id_str = cq.data.split(":", 1)
+    try:
+        doc_id = int(doc_id_str)
+    except ValueError:
+        await cq.answer("Invalid.")
         return
-    await cq.message.edit_reply_markup(reply_markup=_entity_keyboard(session_key, config.entities))
-    await cq.answer()
-
-
-@router.callback_query(F.data.startswith("discard:"))
-async def cb_discard(cq: CallbackQuery) -> None:
-    _, session_key = cq.data.split(":", 1)
-    sess = _sessions.pop(session_key, {})
-    if p := sess.get("tmp_path"):
-        Path(p).unlink(missing_ok=True)
-    await cq.message.edit_text("🗑️ Discarded.")
+    storage.delete_document(config, doc_id)
+    await cq.message.edit_text("🗑️ Deleted.")
     await cq.answer()
 
 
@@ -229,13 +140,13 @@ async def cb_discard(cq: CallbackQuery) -> None:
 async def cmd_status(message: Message, config: Config) -> None:
     docs = storage.get_documents(config, limit=10)
     if not docs:
-        await message.reply("No documents processed yet.")
+        await message.reply("No documents saved yet.")
         return
     lines = ["*Last 10 documents:*\n"]
     for d in docs:
         lines.append(
-            f"• {d.get('doc_date') or '?'} · {d['entity']} · {d['doc_type']} · "
-            f"{d.get('currency', '')} {d.get('total') or 0:,.0f}"
+            f"• #{d['id']} · {d.get('doc_date') or '?'} · {d.get('issuer') or d['entity']} · "
+            f"{d.get('currency', 'HKD')} {d.get('total') or 0:,.0f}"
         )
     await message.reply("\n".join(lines), parse_mode="Markdown")
 
@@ -247,11 +158,11 @@ async def cmd_summary(message: Message, config: Config) -> None:
     month = parts[2] if len(parts) > 2 else None
     txns = storage.get_transactions(config, entity=entity, month=month)
     if not txns:
-        await message.reply("No transactions found for those filters.")
+        await message.reply("No transactions found.")
         return
     income = sum(t["amount"] for t in txns if t["direction"] == "income")
     expenses = sum(t["amount"] for t in txns if t["direction"] == "expense")
-    label = f"{entity or 'all entities'} · {month or 'all time'}"
+    label = f"{entity or 'all'} · {month or 'all time'}"
     await message.reply(
         f"*{label}*\n\n"
         f"Income:   HKD {income:,.2f}\n"
@@ -269,9 +180,8 @@ async def cmd_transactions(message: Message, config: Config) -> None:
     month = parts[2] if len(parts) > 2 else None
     txns = storage.get_transactions(config, entity=entity, month=month)
     if not txns:
-        await message.reply("No transactions found for those filters.")
+        await message.reply("No transactions found.")
         return
-    # Cap at 50 rows to keep image readable
     capped = txns[:50]
     img_bytes = render_transactions(capped)
     from aiogram.types import BufferedInputFile
@@ -280,8 +190,7 @@ async def cmd_transactions(message: Message, config: Config) -> None:
         label += " (showing first 50)"
     await message.reply_photo(
         photo=BufferedInputFile(img_bytes, filename="transactions.png"),
-        caption=f"📋 *{label}*",
-        parse_mode="Markdown",
+        caption=f"📋 *{label}*", parse_mode="Markdown",
     )
 
 
@@ -292,28 +201,45 @@ async def cmd_pl(message: Message, config: Config) -> None:
     month = parts[2] if len(parts) > 2 else None
     txns = storage.get_transactions(config, entity=entity, month=month)
     if not txns:
-        await message.reply("No transactions found for those filters.")
+        await message.reply("No transactions found.")
         return
-    label_entity = (entity or "all entities").replace("_", " ").title()
+    label_entity = (entity or "all").replace("_", " ").title()
     label_month = month or "all time"
     img_bytes = render_summary(label_entity, label_month, txns)
     from aiogram.types import BufferedInputFile
     await message.reply_photo(
         photo=BufferedInputFile(img_bytes, filename="pl.png"),
-        caption=f"📊 *{label_entity}  ·  {label_month}*",
-        parse_mode="Markdown",
+        caption=f"📊 *{label_entity}  ·  {label_month}*", parse_mode="Markdown",
     )
 
 
 @router.message()
-async def cmd_fallback(message: Message) -> None:
+async def cmd_fallback(message: Message, config: Config) -> None:
+    text = message.text or ""
+
+    # Natural language delete
+    if _DELETE_KEYWORDS.search(text):
+        docs = storage.get_documents(config, limit=5)
+        if not docs:
+            await message.reply("Nothing saved yet to delete.")
+            return
+        lines = ["Which document would you like to delete?\n"]
+        for d in docs:
+            lines.append(f"#{d['id']} · {d.get('doc_date') or '?'} · {d.get('issuer') or d['entity']} · {d.get('currency', 'HKD')} {d.get('total') or 0:,.0f}")
+        await message.reply(
+            "\n".join(lines),
+            reply_markup=_delete_keyboard([d["id"] for d in docs]),
+        )
+        return
+
     await message.reply(
-        "📂 *SavemyBrain Bot*\n\n"
-        "Send me a PDF, photo, or document to process it.\n\n"
+        "📂 *SavemyBrain*\n\n"
+        "Send me any bank statement, receipt, or invoice — I'll read it and save it automatically.\n\n"
         "*Commands:*\n"
-        "/status — last 10 documents\n"
-        "/transactions [entity] [YYYY-MM] — transaction detail image\n"
-        "/pl [entity] [YYYY-MM] — P&L summary image",
+        "/status — last 10 saved documents\n"
+        "/transactions — full transaction list\n"
+        "/pl — income vs expenses summary\n\n"
+        "_To delete a document, just say \"delete\" and I'll show you what's saved._",
         parse_mode="Markdown",
     )
 
