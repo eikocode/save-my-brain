@@ -19,7 +19,7 @@ _CATEGORIES = ["rent", "utilities", "insurance", "management", "rewards", "misc"
 
 
 def create_app(config: Config) -> FastAPI:
-    app = FastAPI(title="Ledger")
+    app = FastAPI(title="SavemyBrain")
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
     @app.get("/", response_class=HTMLResponse)

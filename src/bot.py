@@ -308,7 +308,7 @@ async def cmd_pl(message: Message, config: Config) -> None:
 @router.message()
 async def cmd_fallback(message: Message) -> None:
     await message.reply(
-        "📂 *Ledger Bot*\n\n"
+        "📂 *SavemyBrain Bot*\n\n"
         "Send me a PDF, photo, or document to process it.\n\n"
         "*Commands:*\n"
         "/status — last 10 documents\n"

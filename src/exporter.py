@@ -3,7 +3,7 @@ from pathlib import Path
 
 from .config import Config
 
-CREDENTIALS_PATH = Path.home() / ".ledger" / "google-credentials.json"
+CREDENTIALS_PATH = Path.home() / ".savemybrain" / "google-credentials.json"
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 CSV_HEADERS = [
@@ -13,7 +13,7 @@ CSV_HEADERS = [
 
 
 def get_csv_path(config: Config) -> Path:
-    p = Path(config.output_folder).expanduser() / "exports" / "ledger.csv"
+    p = Path(config.output_folder).expanduser() / "exports" / "savemybrain.csv"
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 

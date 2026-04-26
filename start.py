@@ -12,7 +12,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
 )
-log = logging.getLogger("ledger")
+log = logging.getLogger("savemybrain")
 
 
 def _process_file(config, path: Path) -> None:
@@ -58,12 +58,12 @@ async def main() -> None:
 
     # Web server in background thread (uvicorn is sync-safe this way)
     web_thread = threading.Thread(
-        target=run_web, args=(config,), daemon=True, name="ledger-web"
+        target=run_web, args=(config,), daemon=True, name="savemybrain-web"
     )
     web_thread.start()
 
     log.info(
-        "Ledger running — inbox: %s | web: http://localhost:%d | bot: %s",
+        "SavemyBrain running — inbox: %s | web: http://localhost:%d | bot: %s",
         config.inbox_folder, config.web_port,
         "enabled" if config.telegram_bot_token else "disabled (no token)",
     )

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive setup wizard. Run once to configure Ledger."""
+"""Interactive setup wizard. Run once to configure SavemyBrain."""
 import json
 import subprocess
 import sys
@@ -52,7 +52,7 @@ def main() -> None:
     # Init database
     from src import storage
     storage.init_db(config)
-    print("✅ Database initialised: apps/SavemyBrain/data/ledger.db")
+    print("✅ Database initialised: apps/SavemyBrain/data/savemybrain.db")
 
     # launchd
     if sys.platform == "darwin":
@@ -92,7 +92,7 @@ def _setup_launchd(config: Config) -> None:
     plist_path.write_text(plist)
     subprocess.run(["launchctl", "load", str(plist_path)], check=False)
     print(f"✅ launchd service installed: {label}")
-    print(f"   Log: {log_dir / 'ledger.log'}")
+    print(f"   Log: {log_dir / 'savemybrain.log'}")
 
 
 if __name__ == "__main__":

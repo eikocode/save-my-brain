@@ -12,7 +12,7 @@ from .config import Config
 def _db_path(config: Config) -> Path:
     if config._db_path:
         return Path(config._db_path)
-    return Path(__file__).parent.parent / "data" / "ledger.db"
+    return Path(__file__).parent.parent / "data" / "savemybrain.db"
 
 
 @contextmanager
