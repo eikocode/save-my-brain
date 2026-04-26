@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Upload · Ledger{% endblock %}
+{% block content %}
+<h1>Upload Document</h1>
+{% if message %}
+<div class="msg {% if 'Duplicate' in message or 'failed' in message %}warn{% endif %}">{{ message }}</div>
+{% endif %}
+<div class="card" style="max-width:560px">
+  <form method="post" action="/upload" enctype="multipart/form-data" id="upload-form">
+    <div id="drop-zone" style="border:2px dashed #333;border-radius:8px;padding:3rem;text-align:center;
+         cursor:pointer;margin-bottom:1rem;transition:border-color 0.2s">
+      <div style="font-size:2rem;margin-bottom:0.5rem">📄</div>
+      <div style="color:#888">Drag &amp; drop PDF or photo here</div>
+      <div style="color:#555;font-size:0.85rem;margin-top:0.25rem">or click to browse</div>
+      <input type="file" name="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png,.webp"
+             required style="display:none">
+    </div>
+    <div id="file-name" style="color:#64c8a0;margin-bottom:1rem;font-size:0.9rem"></div>
+    <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:1rem">
+      <label style="color:#888;font-size:0.9rem">Entity (optional — auto-detected):</label>
+      <select name="entity">
+        <option value="">Auto-detect</option>
+        {% for e in entities %}
+        <option value="{{ e }}">{{ e | replace("_"," ") | title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn" type="submit">Process Document</button>
+  </form>
+</div>
+<script>
+const zone = document.getElementById('drop-zone');
+const input = document.getElementById('file-input');
+const label = document.getElementById('file-name');
+zone.addEventListener('click', () => input.click());
+input.addEventListener('change', () => { label.textContent = input.files[0]?.name || ''; });
+['dragover','dragenter'].forEach(e => zone.addEventListener(e, ev => {
+  ev.preventDefault(); zone.style.borderColor = '#64c8a0';
+}));
+['dragleave','drop'].forEach(e => zone.addEventListener(e, ev => {
+  ev.preventDefault(); zone.style.borderColor = '#333';
+}));
+zone.addEventListener('drop', ev => {
+  ev.preventDefault();
+  if (ev.dataTransfer.files.length) {
+    input.files = ev.dataTransfer.files;
+    label.textContent = ev.dataTransfer.files[0].name;
+  }
+});
+</script>
+{% endblock %}

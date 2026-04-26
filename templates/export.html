@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Export · Ledger{% endblock %}
+{% block content %}
+<h1>Export</h1>
+{% if synced is not none %}
+<div class="msg">✅ Exported {{ synced }} row(s) to Google Sheets{% if csv_path %} · CSV: {{ csv_path }}{% endif %}</div>
+{% endif %}
+<div class="card" style="max-width:480px">
+  <p style="color:#888;margin-bottom:1.25rem;font-size:0.95rem">
+    Regenerates <code>ledger.csv</code> and syncs all transactions to Google Sheets.
+    This overwrites the sheet completely.
+  </p>
+  <form method="post" action="/export">
+    <button class="btn" type="submit">Export Now</button>
+  </form>
+</div>
+{% endblock %}

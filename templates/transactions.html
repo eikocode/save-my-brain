@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Transactions · Ledger{% endblock %}
+{% block content %}
+<h1>Transactions</h1>
+<form method="get" action="/transactions">
+  <select name="entity">
+    <option value="">All entities</option>
+    {% for e in entities %}
+    <option value="{{ e }}" {% if entity == e %}selected{% endif %}>{{ e | replace("_"," ") | title }}</option>
+    {% endfor %}
+  </select>
+  <input type="month" name="month" value="{{ month or '' }}" placeholder="YYYY-MM">
+  <select name="category">
+    <option value="">All categories</option>
+    {% for c in categories %}
+    <option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c | title }}</option>
+    {% endfor %}
+  </select>
+  <select name="direction">
+    <option value="">All</option>
+    <option value="income" {% if direction == "income" %}selected{% endif %}>Income</option>
+    <option value="expense" {% if direction == "expense" %}selected{% endif %}>Expense</option>
+  </select>
+  <button class="btn" type="submit">Filter</button>
+  <a href="/transactions" class="btn btn-outline">Clear</a>
+</form>
+<div class="card" style="padding:0;overflow:hidden">
+<table>
+  <tr><th>Date</th><th>Entity</th><th>Merchant</th><th>Amount</th><th>Currency</th><th>Category</th><th>Direction</th></tr>
+  {% for t in transactions %}
+  <tr>
+    <td>{{ t.date or "—" }}</td>
+    <td>{{ t.entity | replace("_"," ") | title }}</td>
+    <td>{{ t.merchant or "—" }}</td>
+    <td>{{ "%.2f"|format(t.amount or 0) }}</td>
+    <td>{{ t.currency or "" }}</td>
+    <td>{{ t.category or "" }}</td>
+    <td><span class="tag {% if t.direction == 'income' %}tag-income{% else %}tag-expense{% endif %}">{{ t.direction }}</span></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="7" style="text-align:center;color:#555;padding:2rem">No transactions found.</td></tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

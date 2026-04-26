@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Ledger{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="grid">
+  {% for s in summaries %}
+  <div class="card">
+    <h2>{{ s.entity | replace("_", " ") | title }}</h2>
+    <div class="num income">+{{ "%.0f"|format(s.income) }}</div>
+    <div style="font-size:0.8rem;color:#888;margin:0.2rem 0">income</div>
+    <div class="num expense">−{{ "%.0f"|format(s.expenses) }}</div>
+    <div style="font-size:0.8rem;color:#888;margin:0.2rem 0">expenses</div>
+    <hr style="border:none;border-top:1px solid #222;margin:0.75rem 0">
+    <div class="num {% if s.net >= 0 %}income{% else %}expense{% endif %}">
+      {{ "%.0f"|format(s.net) }}
+    </div>
+    <div style="font-size:0.8rem;color:#888;margin:0.2rem 0">net · {{ s.count }} txns</div>
+    <a href="/transactions?entity={{ s.entity }}" style="font-size:0.85rem">View →</a>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
