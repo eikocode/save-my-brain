@@ -11,6 +11,28 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../i18n';
 import Layout from '../components/Layout';
 
+const QUOTES = [
+  { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
+  { text: "It is not enough to be busy. The question is: what are we busy about?", author: "Henry David Thoreau" },
+  { text: "Your time is limited, so don't waste it living someone else's life.", author: "Steve Jobs" },
+  { text: "Beware the barrenness of a busy life.", author: "Socrates" },
+  { text: "The key is not to prioritise what's on your schedule, but to schedule your priorities.", author: "Stephen Covey" },
+  { text: "Almost everything will work again if you unplug it for a few minutes — including you.", author: "Anne Lamott" },
+  { text: "The best way to predict your future is to create it.", author: "Abraham Lincoln" },
+  { text: "Focus on being productive instead of busy.", author: "Tim Ferriss" },
+  { text: "Simplicity is the ultimate sophistication.", author: "Leonardo da Vinci" },
+  { text: "If you want something done, ask a busy person.", author: "Benjamin Franklin" },
+  { text: "Do what you can, with what you have, where you are.", author: "Theodore Roosevelt" },
+  { text: "The most precious resource we all have is time.", author: "Steve Jobs" },
+  { text: "An investment in knowledge pays the best interest.", author: "Benjamin Franklin" },
+  { text: "Work smarter, not harder.", author: "Allan F. Mogensen" },
+  { text: "The art of knowing is knowing what to ignore.", author: "Rumi" },
+];
+
+function randomQuote() {
+  return QUOTES[Math.floor(Math.random() * QUOTES.length)];
+}
+
 const DOC_EMOJI = {
   bank_statement: '🏦', credit_card: '💳', insurance: '🛡️',
   legal: '⚖️', medical: '🏥', contract: '📋', receipt: '🧾',
@@ -38,7 +60,7 @@ export default function Library() {
   const [selectedType, setSelectedType] = useState('all');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0, failed: 0 });
+  const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0, failed: 0, dupes: 0 });
   const [dragOver, setDragOver] = useState(false);
   const [expandedDoc, setExpandedDoc] = useState(null);
   const fileInputRef = useRef(null);
@@ -49,7 +71,18 @@ export default function Library() {
   const [chatSending, setChatSending] = useState(false);
   const chatEndRef = useRef(null);
 
+  const [quoteOfDay, setQuoteOfDay] = useState(null);
+
   useEffect(() => { loadAll(); }, []);
+  useEffect(() => {
+    const INTERVAL_MS = 24 * 60 * 60 * 1000;
+    const lastShown = parseInt(localStorage.getItem('smb_quote_ts') || '0', 10);
+    if (Date.now() - lastShown >= INTERVAL_MS) {
+      const q = randomQuote();
+      setQuoteOfDay(q);
+      localStorage.setItem('smb_quote_ts', String(Date.now()));
+    }
+  }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
 
   async function loadAll() {
@@ -84,8 +117,8 @@ export default function Library() {
     const apiBase = import.meta.env.VITE_API_URL || '';
     let done = 0;
     let failed = 0;
+    let dupes = 0;
 
-    // Process in parallel batches of 3
     const BATCH_SIZE = 3;
     for (let i = 0; i < fileList.length; i += BATCH_SIZE) {
       const batch = fileList.slice(i, i + BATCH_SIZE);
@@ -98,6 +131,7 @@ export default function Library() {
             headers: { Authorization: `Bearer ${token}` },
             body: formData,
           });
+          if (resp.status === 409) return { __dupe: true };
           if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.detail?.message || err.detail || `Failed (${resp.status})`);
@@ -106,15 +140,26 @@ export default function Library() {
         })
       );
       for (const r of results) {
-        if (r.status === 'fulfilled') done++;
-        else { failed++; console.error('Upload failed:', r.reason); }
+        if (r.status === 'fulfilled') {
+          if (r.value?.__dupe) dupes++;
+          else done++;
+        } else {
+          failed++;
+          console.error('Upload failed:', r.reason);
+        }
       }
-      setUploadProgress({ done, total: fileList.length, failed });
+      setUploadProgress({ done, total: fileList.length, failed, dupes });
     }
 
     setUploading(false);
-    if (failed > 0) {
-      alert(`${done} uploaded, ${failed} failed.`);
+    if (dupes > 0 && failed === 0 && done === 0) {
+      alert(`Already saved — this document was uploaded before.`);
+    } else if (dupes > 0 || failed > 0) {
+      const parts = [];
+      if (done > 0) parts.push(`${done} uploaded`);
+      if (dupes > 0) parts.push(`${dupes} already saved`);
+      if (failed > 0) parts.push(`${failed} failed`);
+      alert(parts.join(', ') + '.');
     }
     setTimeout(loadAll, 1000);
   }
@@ -241,6 +286,25 @@ export default function Library() {
         <div className="dash-greeting">
           <h1><span>{greeting.emoji}</span> <span>{greeting.text}, {user?.name || 'there'}</span></h1>
         </div>
+
+        {/* ── Quote Card ── */}
+        {quoteOfDay && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(125,208,255,0.07), rgba(125,208,255,0.03))',
+            border: '1px solid rgba(125,208,255,0.15)',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            marginBottom: '12px',
+            fontSize: '13px',
+            color: 'var(--color-text-secondary)',
+            lineHeight: 1.6,
+          }}>
+            💡 <em>"{quoteOfDay.text}"</em>
+            <span style={{ display: 'block', marginTop: '4px', color: 'var(--color-accent)', fontWeight: 500 }}>
+              — {quoteOfDay.author}
+            </span>
+          </div>
+        )}
 
         {/* ── Chat Area ── */}
         {chatMessages.length > 0 && (
