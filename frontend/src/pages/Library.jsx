@@ -60,7 +60,7 @@ export default function Library() {
   const [selectedType, setSelectedType] = useState('all');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0, failed: 0, dupes: 0 });
+  const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0, failed: 0, dupes: 0, pct: 0 });
   const [dragOver, setDragOver] = useState(false);
   const [expandedDoc, setExpandedDoc] = useState(null);
   const fileInputRef = useRef(null);
@@ -119,36 +119,49 @@ export default function Library() {
     let failed = 0;
     let dupes = 0;
 
-    const BATCH_SIZE = 3;
-    for (let i = 0; i < fileList.length; i += BATCH_SIZE) {
-      const batch = fileList.slice(i, i + BATCH_SIZE);
-      const results = await Promise.allSettled(
-        batch.map(async (file) => {
-          const formData = new FormData();
-          formData.append('file', file);
-          const resp = await fetch(`${apiBase}/api/documents/upload`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-            body: formData,
-          });
-          if (resp.status === 409) return { __dupe: true };
-          if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            throw new Error(err.detail?.message || err.detail || `Failed (${resp.status})`);
+    const uploadWithProgress = (file, fileIndex) =>
+      new Promise((resolve, reject) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${apiBase}/api/documents/upload`);
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const filePct = Math.round((e.loaded / e.total) * 100);
+            // Overall pct: completed files + current file progress
+            const overallPct = Math.round(
+              ((fileIndex + filePct / 100) / fileList.length) * 100
+            );
+            setUploadProgress(prev => ({ ...prev, pct: overallPct }));
           }
-          return resp.json();
-        })
-      );
-      for (const r of results) {
-        if (r.status === 'fulfilled') {
-          if (r.value?.__dupe) dupes++;
-          else done++;
-        } else {
-          failed++;
-          console.error('Upload failed:', r.reason);
-        }
+        };
+        xhr.onload = () => {
+          if (xhr.status === 409) { resolve({ __dupe: true }); return; }
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try { resolve(JSON.parse(xhr.responseText)); }
+            catch { resolve({}); }
+          } else {
+            try {
+              const err = JSON.parse(xhr.responseText);
+              reject(new Error(err.detail?.message || err.detail || `Failed (${xhr.status})`));
+            } catch { reject(new Error(`Failed (${xhr.status})`)); }
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network error'));
+        xhr.send(formData);
+      });
+
+    for (let i = 0; i < fileList.length; i++) {
+      try {
+        const result = await uploadWithProgress(fileList[i], i);
+        if (result?.__dupe) dupes++;
+        else done++;
+      } catch (e) {
+        failed++;
+        console.error('Upload failed:', e);
       }
-      setUploadProgress({ done, total: fileList.length, failed, dupes });
+      setUploadProgress({ done, total: fileList.length, failed, dupes, pct: Math.round(((i + 1) / fileList.length) * 100) });
     }
 
     setUploading(false);
@@ -361,10 +374,19 @@ export default function Library() {
           {uploading ? (
             <div className="dash-upload-progress">
               <span>🔄</span>
-              <span>Processing {uploadProgress.done} / {uploadProgress.total}...</span>
+              <span>
+                {uploadProgress.pct < 100
+                  ? `Uploading… ${uploadProgress.pct}%`
+                  : `Processing ${uploadProgress.done} / ${uploadProgress.total}…`}
+              </span>
               <div className="dash-upload-bar">
-                <div className="dash-upload-bar-fill" style={{ width: `${uploadProgress.total ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%` }} />
+                <div className="dash-upload-bar-fill" style={{ width: `${uploadProgress.pct}%`, transition: 'width 0.2s ease' }} />
               </div>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-faint)' }}>
+                {uploadProgress.done > 0 && `${uploadProgress.done} done`}
+                {uploadProgress.dupes > 0 && ` · ${uploadProgress.dupes} already saved`}
+                {uploadProgress.failed > 0 && ` · ${uploadProgress.failed} failed`}
+              </span>
             </div>
           ) : (
             <>
