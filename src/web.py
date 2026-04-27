@@ -6,7 +6,8 @@ from urllib.parse import quote
 
 import uvicorn
 from fastapi import FastAPI, File, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from .classifier import classify
@@ -20,7 +21,112 @@ _CATEGORIES = ["rent", "utilities", "insurance", "management", "rewards", "misc"
 
 def create_app(config: Config) -> FastAPI:
     app = FastAPI(title="SavemyBrain")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+
+    # ── REST API endpoints (used by React frontend) ──────────────────────────
+
+    @app.get("/api/users/me")
+    async def api_me():
+        return {"id": 1, "name": "User", "email": "", "language": "en",
+                "timezone": "Asia/Hong_Kong", "onboarding_complete": True}
+
+    @app.post("/api/users/onboarding")
+    async def api_onboarding(request: Request):
+        return {"ok": True}
+
+    @app.get("/api/users/family-members")
+    async def api_family_members():
+        return []
+
+    @app.get("/api/billing/status")
+    async def api_billing_status():
+        return {"plan": "trial", "days_remaining": 7, "docs_remaining": 3}
+
+    @app.get("/api/documents")
+    async def api_documents():
+        docs = storage.get_documents(config)
+        return [
+            {
+                "id": d["id"],
+                "filename": d.get("original_filename") or d.get("filename") or "document",
+                "doc_type": d.get("doc_type") or "other",
+                "summary": d.get("summary"),
+                "uploaded_at": d.get("created_at"),
+                "family_member_id": None,
+                "key_points": None,
+                "red_flags": None,
+                "structured_data": None,
+            }
+            for d in docs
+        ]
+
+    @app.post("/api/documents/upload", status_code=201)
+    async def api_upload(file: UploadFile = File(...)):
+        suffix = Path(file.filename or "upload").suffix or ".pdf"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tf:
+            tf.write(await file.read())
+            tmp_path = Path(tf.name)
+
+        h = storage.file_hash(tmp_path)
+        if storage.is_duplicate(config, h):
+            tmp_path.unlink(missing_ok=True)
+            return JSONResponse(status_code=409, content={"detail": "Duplicate — already processed"})
+
+        try:
+            result = extract_document(config, tmp_path)
+            classify(result, config.entities)
+            from .bot import _entity_from_result
+            entity = _entity_from_result(result)
+            doc_id = storage.save_document(
+                config, entity, result.doc_type, result.issuer,
+                result.doc_date, result.currency, result.total,
+                h, file.filename or "upload", result.summary,
+            )
+            storage.save_transactions(config, doc_id, entity, result.transactions)
+        except Exception as e:
+            tmp_path.unlink(missing_ok=True)
+            return JSONResponse(status_code=422, content={"detail": str(e)})
+
+        tmp_path.unlink(missing_ok=True)
+        return {"id": doc_id, "filename": file.filename, "doc_type": result.doc_type,
+                "summary": result.summary}
+
+    @app.post("/api/chat")
+    async def api_chat(request: Request):
+        body = await request.json()
+        msg = (body.get("message") or "").strip()
+        if not msg:
+            return {"message": ""}
+        docs = storage.get_documents(config, limit=20)
+        context = "\n".join(
+            f"- [{d.get('doc_type','?')}] {d.get('issuer') or d.get('filename')} "
+            f"{d.get('doc_date','')} {d.get('currency','')} {d.get('total') or ''}"
+            for d in docs
+        )
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=config.anthropic_api_key)
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=512,
+                system=(
+                    "You are Save My Brain AI, a business document assistant. "
+                    "Answer questions based on the user's saved documents. Be concise.\n\n"
+                    f"Documents on file:\n{context or 'None yet.'}"
+                ),
+                messages=[{"role": "user", "content": msg}],
+            )
+            return {"message": resp.content[0].text}
+        except Exception as e:
+            return {"message": f"Sorry, I couldn't process that: {e}"}
+
+    # ── End REST API ─────────────────────────────────────────────────────────
 
     @app.get("/", response_class=HTMLResponse)
     async def dashboard(request: Request):
