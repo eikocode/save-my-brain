@@ -114,6 +114,34 @@ def create_app(config: Config) -> FastAPI:
             "pages": max(1, -(-total // limit)),
         }
 
+    @app.get("/api/export/csv")
+    async def api_export_csv():
+        from fastapi.responses import StreamingResponse
+        import io
+        from . import exporter
+        txns = storage.get_transactions(config)
+        docs = {d["id"]: d for d in storage.get_documents(config)}
+        output = io.StringIO()
+        import csv as _csv
+        writer = _csv.DictWriter(output, fieldnames=exporter.CSV_HEADERS)
+        writer.writeheader()
+        for t in txns:
+            doc = docs.get(t.get("document_id"), {})
+            writer.writerow({
+                "id": t.get("id",""), "entity": t.get("entity",""),
+                "date": t.get("date",""), "merchant": t.get("merchant",""),
+                "amount": t.get("amount",""), "currency": t.get("currency",""),
+                "category": t.get("category",""), "direction": t.get("direction",""),
+                "issuer": doc.get("issuer",""), "doc_date": doc.get("doc_date",""),
+                "doc_type": doc.get("doc_type",""), "doc_id": t.get("document_id",""),
+            })
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=savemybrain-transactions.csv"},
+        )
+
     @app.delete("/api/documents/{doc_id}", status_code=200)
     async def api_delete_document(doc_id: int):
         storage.delete_document(config, doc_id)

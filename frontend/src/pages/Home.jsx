@@ -168,7 +168,21 @@ export default function Home() {
       <div style={{ padding: "28px 32px", maxWidth: "860px" }}>
 
         {/* ── Header ── */}
-        <h1 style={{ fontSize: "20px", fontWeight: 800, marginBottom: "24px" }}>Overview</h1>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
+          <h1 style={{ fontSize: "20px", fontWeight: 800 }}>Overview</h1>
+          <a
+            href="/api/export/csv"
+            download="savemybrain-transactions.csv"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: "6px",
+              padding: "8px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 600,
+              background: "var(--color-surface)", border: "1px solid var(--color-border)",
+              color: "var(--color-text)", textDecoration: "none",
+            }}
+          >
+            ↓ Export CSV
+          </a>
+        </div>
 
         {/* ── Stat strip ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "14px", marginBottom: "28px" }}>
