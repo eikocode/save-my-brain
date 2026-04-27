@@ -150,14 +150,23 @@ def create_app(config: Config) -> FastAPI:
         return {"id": doc_id, "filename": file.filename, "doc_type": result.doc_type,
                 "summary": result.summary}
 
-    def _build_doc_context(docs: list[dict]) -> str:
-        lines = []
+    def _build_full_context(docs: list[dict]) -> str:
+        txns = storage.get_transactions(config)
+        lines = ["=== DOCUMENTS ==="]
         for d in docs:
             lines.append(
-                f"- [{d.get('doc_type','?')}] {d.get('issuer') or d.get('filename')} "
+                f"[{d.get('doc_type','?')}] {d.get('issuer') or d.get('filename')} "
                 f"| date: {d.get('doc_date') or 'unknown'} "
-                f"| amount: {d.get('currency','')} {d.get('total') or 'N/A'} "
-                f"| summary: {(d.get('summary') or '')[:300]}"
+                f"| total: {d.get('currency','')} {d.get('total') or 'N/A'} "
+                f"| {(d.get('summary') or '')[:200]}"
+            )
+        lines.append("\n=== TRANSACTIONS ===")
+        for t in txns:
+            lines.append(
+                f"{t.get('date','?')} | {t.get('merchant','?')} | "
+                f"{t.get('currency','HKD')} {t.get('amount','?')} | "
+                f"{t.get('category','misc')} | {t.get('direction','expense')}"
+                + (f" | {t.get('notes')}" if t.get('notes') else "")
             )
         return "\n".join(lines)
 
@@ -166,7 +175,7 @@ def create_app(config: Config) -> FastAPI:
         docs = storage.get_documents(config, limit=50)
         if not docs:
             return {"cards": [], "generated_at": None}
-        context = _build_doc_context(docs)
+        context = _build_full_context(docs)
         prompt = (
             "You are an AI financial assistant. Analyse the user's documents below and "
             "return a JSON array of exactly 6 insight cards. Each card must have these fields:\n"
@@ -204,7 +213,7 @@ def create_app(config: Config) -> FastAPI:
         if not msg:
             return {"message": ""}
         docs = storage.get_documents(config, limit=50)
-        context = _build_doc_context(docs)
+        context = _build_full_context(docs)
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=config.anthropic_api_key)
@@ -213,11 +222,11 @@ def create_app(config: Config) -> FastAPI:
                 max_tokens=512,
                 system=(
                     "You are Save My Brain AI, a personal finance assistant. "
-                    "Answer questions based on the user's saved documents. Be concise and specific — "
-                    "use actual numbers and dates from the documents when available. "
-                    "Format responses with plain section headers (no # symbols), bullet points starting with '- ', "
-                    "and bold key numbers using **HKD X** syntax. No markdown heading symbols.\n\n"
-                    f"Documents on file:\n{context or 'None yet.'}"
+                    "Answer questions using the actual transaction data and document summaries provided. "
+                    "Always use real numbers from the data — never estimate. "
+                    "Format: plain section headers (no # symbols), bullet points starting with '- ', "
+                    "bold key numbers as **HKD X**. Be concise.\n\n"
+                    f"{context or 'No documents yet.'}"
                 ),
                 messages=[{"role": "user", "content": msg}],
             )

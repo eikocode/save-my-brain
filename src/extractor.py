@@ -46,21 +46,32 @@ Return ONLY valid JSON — no markdown fences, no extra text:
       "merchant": "name",
       "amount": 0.00,
       "currency": "HKD",
-      "category": "rent, utilities, insurance, management, rewards, or misc",
+      "category": "one of the categories below",
       "direction": "income or expense",
       "notes": "optional string or null"
     }}
   ],
-  "summary": "2-3 sentence markdown summary of the document"
+  "summary": "2-3 sentence summary of the document"
 }}
 
-Category rules:
-- "rent": rental income received or rent paid
+Category rules — pick the most specific match:
+- "groceries": supermarkets, food stores (City Super, Great, Sogo food hall, Wellcome, etc.)
+- "dining": restaurants, cafes, food delivery, takeaway
+- "transport": MTR, taxi, Uber, petrol, parking, flights, ferry
+- "travel": hotels, travel packages, holiday spending — use alongside transport for trips
+- "shopping": retail, clothing, department stores, online shopping
+- "electronics": Apple, tech, gadgets, electronics stores
+- "health": pharmacy, doctors, dentist, medical, gym, sports
+- "beauty": salon, spa, skincare, haircut
+- "entertainment": cinema, events, subscriptions (Netflix, Spotify, etc.)
+- "software": SaaS, apps, cloud services (Wix, Dropbox, Loom, CapCut, etc.)
+- "education": courses, books, training
 - "utilities": electricity, gas, water, internet, phone bills
 - "insurance": insurance premiums
-- "management": property management fees, agent fees
-- "rewards": cashback, rebates, bank bonus credits, points redemptions — small credits from the bank itself
-- "misc": everything else
+- "rent": rental income received or rent paid
+- "tax": tax payments, government fees
+- "rewards": cashback, rebates, bank bonus credits, points redemptions
+- "misc": anything that doesn't fit above
 
 Direction rules — read these carefully:
 - "income": ONLY genuine income — rent received, salary, business revenue, interest earned
