@@ -111,7 +111,7 @@ export default function Library() {
     if (!files || files.length === 0) return;
     const fileList = Array.from(files);
     setUploading(true);
-    setUploadProgress({ done: 0, total: fileList.length, failed: 0 });
+    setUploadProgress({ done: 0, total: fileList.length, failed: 0, dupes: 0, pct: 0 });
 
     const token = getToken();
     const apiBase = import.meta.env.VITE_API_URL || '';
@@ -119,6 +119,7 @@ export default function Library() {
     let failed = 0;
     let dupes = 0;
 
+    // Upload phase = 0–70%, processing phase = 70–100%
     const uploadWithProgress = (file, fileIndex) =>
       new Promise((resolve, reject) => {
         const formData = new FormData();
@@ -128,15 +129,17 @@ export default function Library() {
         if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
-            const filePct = Math.round((e.loaded / e.total) * 100);
-            // Overall pct: completed files + current file progress
+            const filePct = e.loaded / e.total;
             const overallPct = Math.round(
-              ((fileIndex + filePct / 100) / fileList.length) * 100
+              ((fileIndex + filePct * 0.7) / fileList.length) * 100
             );
             setUploadProgress(prev => ({ ...prev, pct: overallPct }));
           }
         };
         xhr.onload = () => {
+          // Upload done — jump to 85% (AI still processing)
+          const processingPct = Math.round(((fileIndex + 0.85) / fileList.length) * 100);
+          setUploadProgress(prev => ({ ...prev, pct: processingPct }));
           if (xhr.status === 409) { resolve({ __dupe: true }); return; }
           if (xhr.status >= 200 && xhr.status < 300) {
             try { resolve(JSON.parse(xhr.responseText)); }
