@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import re
 import tempfile
 from datetime import datetime, timezone
@@ -23,6 +24,41 @@ log = logging.getLogger(__name__)
 router = Router()
 
 _DELETE_KEYWORDS = re.compile(r"\b(delete|remove|erase|discard|trash)\b", re.I)
+
+_QUOTES = [
+    ("The secret of getting ahead is getting started.", "Mark Twain"),
+    ("It is not enough to be busy. The question is: what are we busy about?", "Henry David Thoreau"),
+    ("Your time is limited, so don't waste it living someone else's life.", "Steve Jobs"),
+    ("Beware the barrenness of a busy life.", "Socrates"),
+    ("The key is not to prioritise what's on your schedule, but to schedule your priorities.", "Stephen Covey"),
+    ("Almost everything will work again if you unplug it for a few minutes — including you.", "Anne Lamott"),
+    ("The best way to predict your future is to create it.", "Abraham Lincoln"),
+    ("Focus on being productive instead of busy.", "Tim Ferriss"),
+    ("Simplicity is the ultimate sophistication.", "Leonardo da Vinci"),
+    ("Do what you can, with what you have, where you are.", "Theodore Roosevelt"),
+    ("The most precious resource we all have is time.", "Steve Jobs"),
+    ("An investment in knowledge pays the best interest.", "Benjamin Franklin"),
+    ("The art of knowing is knowing what to ignore.", "Rumi"),
+    ("Work smarter, not harder.", "Allan F. Mogensen"),
+    ("You don't have to be great to start, but you have to start to be great.", "Zig Ziglar"),
+]
+
+# Tracks last greeting time per user: {user_id: datetime}
+_last_greeted: dict[int, datetime] = {}
+
+_GREETING_INTERVAL_HOURS = 24
+
+
+async def _maybe_greet(message: Message) -> None:
+    """Send a motivational quote if 24 hours have passed since last greeting."""
+    user_id = message.from_user.id
+    now = datetime.now(timezone.utc)
+    last = _last_greeted.get(user_id)
+    if last and (now - last).total_seconds() < _GREETING_INTERVAL_HOURS * 3600:
+        return
+    _last_greeted[user_id] = now
+    quote, author = random.choice(_QUOTES)
+    await message.answer(f'💡 _"{quote}"_\n— {author}', parse_mode="Markdown")
 
 
 def _entity_from_result(result: ExtractionResult) -> str:
@@ -53,6 +89,7 @@ def _delete_keyboard(doc_ids: list[int]) -> InlineKeyboardMarkup:
 
 @router.message(F.document | F.photo)
 async def handle_doc(message: Message, config: Config) -> None:
+    await _maybe_greet(message)
     if message.document:
         file, fname = message.document, message.document.file_name
     else:
@@ -215,6 +252,7 @@ async def cmd_pl(message: Message, config: Config) -> None:
 
 @router.message()
 async def cmd_fallback(message: Message, config: Config) -> None:
+    await _maybe_greet(message)
     text = message.text or ""
 
     # Natural language delete

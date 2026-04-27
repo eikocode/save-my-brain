@@ -128,6 +128,55 @@ def get_documents(config: Config, limit: int | None = None) -> list[dict]:
         return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
+def get_entity_summaries(config: Config) -> list[dict]:
+    sql = """
+        SELECT
+            entity,
+            COUNT(*) AS doc_count,
+            SUM(CASE WHEN total IS NOT NULL THEN total ELSE 0 END) AS total_amount,
+            MAX(currency) AS currency,
+            MAX(created_at) AS last_updated,
+            GROUP_CONCAT(DISTINCT doc_type) AS doc_types
+        FROM documents
+        GROUP BY entity
+        ORDER BY last_updated DESC
+    """
+    with get_db(config) as conn:
+        return [dict(r) for r in conn.execute(sql).fetchall()]
+
+
+def get_documents_by_entity(config: Config, entity: str,
+                             page: int = 1, limit: int = 20) -> tuple[list[dict], int]:
+    offset = (page - 1) * limit
+    with get_db(config) as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM documents WHERE entity = ?", (entity,)
+        ).fetchone()[0]
+        rows = conn.execute(
+            "SELECT * FROM documents WHERE entity = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (entity, limit, offset),
+        ).fetchall()
+    return [dict(r) for r in rows], total
+
+
+def search_documents(config: Config, query: str,
+                     page: int = 1, limit: int = 20) -> tuple[list[dict], int]:
+    q = f"%{query}%"
+    with get_db(config) as conn:
+        total = conn.execute(
+            """SELECT COUNT(*) FROM documents
+               WHERE issuer LIKE ? OR summary LIKE ? OR doc_type LIKE ? OR entity LIKE ?""",
+            (q, q, q, q),
+        ).fetchone()[0]
+        rows = conn.execute(
+            """SELECT * FROM documents
+               WHERE issuer LIKE ? OR summary LIKE ? OR doc_type LIKE ? OR entity LIKE ?
+               ORDER BY created_at DESC LIMIT ? OFFSET ?""",
+            (q, q, q, q, limit, (page - 1) * limit),
+        ).fetchall()
+    return [dict(r) for r in rows], total
+
+
 def delete_document(config: Config, doc_id: int) -> None:
     with get_db(config) as conn:
         conn.execute("DELETE FROM transactions WHERE document_id = ?", (doc_id,))

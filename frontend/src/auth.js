@@ -18,7 +18,8 @@ export const clearAuth = () => {
   localStorage.removeItem('smb_user')
 }
 
-export const isLoggedIn = () => !!getAccessToken()
+// DEV BYPASS — remove before going live
+export const isLoggedIn = () => true
 export const getToken = getAccessToken  // alias used by Phase 8 components
 
 // API base URL — in production, points to DigitalOcean droplet

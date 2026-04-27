@@ -3,7 +3,7 @@
  *
  * Sections:
  * 1. Profile — name, email, plan
- * 2. Your Household — family members (view/manage)
+ * 2. Team Members — manage team (view/manage)
  * 3. Notification Channels — Telegram, Email, LINE
  * 4. Plan & Billing — upgrade buttons
  */
@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Layout from "../components/Layout";
-import { apiFetch, getToken } from "../auth";
+import { apiFetch, getUser } from "../auth";
 
 export default function Settings() {
   const [searchParams] = useSearchParams();
@@ -20,6 +20,7 @@ export default function Settings() {
   const [billingStatus, setBillingStatus] = useState(null);
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(true);
+  const localUser = getUser();
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -58,6 +59,20 @@ export default function Settings() {
   }
 
   const nonSelf = familyMembers.filter(m => m.relationship !== "self");
+  const displayUser = user || localUser;
+
+  const handleUpgrade = async (plan) => {
+    try {
+      const resp = await apiFetch("/api/billing/create-checkout-session", {
+        method: "POST",
+        body: JSON.stringify({ plan }),
+      });
+      const data = await resp.json();
+      if (data.url) window.location.href = data.url;
+    } catch {
+      showToast("Could not start checkout. Please try again.", "warning");
+    }
+  };
 
   return (
     <Layout>
@@ -78,54 +93,26 @@ export default function Settings() {
         {/* Profile */}
         <section className="card" style={{ padding: "24px", marginBottom: "24px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "16px" }}>👤 Profile</h2>
-          {user && (
+          {displayUser && (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ color: "var(--color-text-muted)", fontSize: "14px" }}>Name</span>
-                <span style={{ fontWeight: 600 }}>{user.name}</span>
+                <span style={{ fontWeight: 600 }}>{displayUser.name}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ color: "var(--color-text-muted)", fontSize: "14px" }}>Email</span>
-                <span style={{ fontSize: "14px" }}>{user.email}</span>
+                <span style={{ fontSize: "14px" }}>{displayUser.email}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ color: "var(--color-text-muted)", fontSize: "14px" }}>Language</span>
-                <span style={{ fontSize: "14px" }}>{user.language === "zh-tw" ? "繁體中文" : user.language === "ja" ? "日本語" : "English"}</span>
+                <span style={{ fontSize: "14px" }}>{displayUser.language === "zh-tw" ? "繁體中文" : "English"}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ color: "var(--color-text-muted)", fontSize: "14px" }}>Timezone</span>
-                <span style={{ fontSize: "14px" }}>{user.timezone}</span>
+                <span style={{ fontSize: "14px" }}>{displayUser.timezone}</span>
               </div>
             </div>
           )}
-        </section>
-
-        {/* Household */}
-        <section className="card" style={{ padding: "24px", marginBottom: "24px" }}>
-          <h2 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "16px" }}>👥 Your Household ({nonSelf.length}/7)</h2>
-          {nonSelf.length > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {nonSelf.map(m => (
-                <div key={m.id} style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                  padding: "10px 14px", background: "var(--color-bg)", borderRadius: "8px",
-                  border: "1px solid var(--color-border)",
-                }}>
-                  <div>
-                    <span style={{ fontWeight: 600 }}>{m.name}</span>
-                    <span style={{ color: "var(--color-text-muted)", fontSize: "13px", marginLeft: "8px" }}>({m.relationship})</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p style={{ color: "var(--color-text-muted)", fontSize: "14px" }}>
-              Just you — no one else added yet.
-            </p>
-          )}
-          <p style={{ fontSize: "12px", color: "var(--color-text-muted)", marginTop: "12px" }}>
-            To add or remove people, use the chat: "add Mary Lee (wife)" or "remove Mary"
-          </p>
         </section>
 
         {/* Plan & Billing */}
@@ -240,17 +227,4 @@ export default function Settings() {
       </div>
     </Layout>
   );
-
-  async function handleUpgrade(plan) {
-    try {
-      const resp = await apiFetch("/api/billing/create-checkout-session", {
-        method: "POST",
-        body: JSON.stringify({ plan }),
-      });
-      const data = await resp.json();
-      if (data.url) window.location.href = data.url;
-    } catch {
-      showToast("Could not start checkout. Please try again.", "warning");
-    }
-  }
 }

@@ -11,9 +11,8 @@
 
 import en from './en.json';
 import zhTw from './zh-tw.json';
-import ja from './ja.json';
 
-const translations = { en, 'zh-tw': zhTw, ja };
+const translations = { en, 'zh-tw': zhTw };
 
 export function useTranslation() {
   const lang = localStorage.getItem('smb_lang') || 'en';
@@ -37,5 +36,10 @@ export function useTranslation() {
     return value.replace(/\{(\w+)\}/g, (_, k) => replacements[k] ?? `{${k}}`);
   }
 
-  return { t, lang };
+  function setLang(newLang) {
+    localStorage.setItem('smb_lang', newLang);
+    window.dispatchEvent(new Event('smb-lang-change'));
+  }
+
+  return { t, lang, setLang };
 }

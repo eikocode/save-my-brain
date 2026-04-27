@@ -75,9 +75,9 @@ export default function Landing() {
             </div>
             <h1>
               {lang === 'zh-tw' ? (
-                <><span className="highlight">拯救腦細胞</span><br />告別家庭文件煩惱</>
+                <><span className="highlight">拯救腦細胞</span><br />告別商業文件煩惱</>
               ) : (
-                <>Save your <span className="highlight">Brain</span> from<br />household paperwork</>
+                <>Save your <span className="highlight">Brain</span> from<br />Life Admin</>
               )}
             </h1>
           </div>
@@ -135,7 +135,7 @@ export default function Landing() {
               {lang === 'zh-tw' ? '加密 & 安全' : 'Encrypted & Secure'}
             </div>
             <div style={{ fontWeight: 600, fontSize: '15px' }}>
-              {lang === 'zh-tw' ? '加入 2,500+ 個家庭，更聰明地管理文件。' : 'Join 2,500+ households organizing smarter.'}
+              {lang === 'zh-tw' ? '加入 2,500+ 位創業者，更聰明地管理文件。' : 'Join 2,500+ solo operators organising smarter.'}
             </div>
           </div>
         </div>

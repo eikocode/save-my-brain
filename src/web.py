@@ -29,6 +29,29 @@ def create_app(config: Config) -> FastAPI:
     )
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
+    def _fmt_doc(d: dict) -> dict:
+        return {
+            "id": d["id"],
+            "entity": d.get("entity") or "unknown",
+            "filename": d.get("original_path") or "document",
+            "doc_type": d.get("doc_type") or "other",
+            "issuer": d.get("issuer"),
+            "doc_date": d.get("doc_date"),
+            "currency": d.get("currency"),
+            "total": d.get("total"),
+            "summary": d.get("summary"),
+            "uploaded_at": d.get("created_at"),
+            "family_member_id": None,
+            "key_points": None,
+            "red_flags": None,
+            "structured_data": None,
+        }
+
+    def _entity_display(entity: str) -> str:
+        if not entity or entity == "unknown":
+            return "Unclassified"
+        return entity.replace("_", " ").title()
+
     # ── REST API endpoints (used by React frontend) ──────────────────────────
 
     @app.get("/api/users/me")
@@ -51,20 +74,45 @@ def create_app(config: Config) -> FastAPI:
     @app.get("/api/documents")
     async def api_documents():
         docs = storage.get_documents(config)
+        return [_fmt_doc(d) for d in docs]
+
+    @app.get("/api/folders")
+    async def api_folders():
+        summaries = storage.get_entity_summaries(config)
         return [
             {
-                "id": d["id"],
-                "filename": d.get("original_filename") or d.get("filename") or "document",
-                "doc_type": d.get("doc_type") or "other",
-                "summary": d.get("summary"),
-                "uploaded_at": d.get("created_at"),
-                "family_member_id": None,
-                "key_points": None,
-                "red_flags": None,
-                "structured_data": None,
+                "entity": s["entity"],
+                "display_name": _entity_display(s["entity"]),
+                "doc_count": s["doc_count"],
+                "total_amount": round(s["total_amount"] or 0, 2),
+                "currency": s["currency"] or "HKD",
+                "last_updated": (s["last_updated"] or "")[:10],
+                "doc_types": (s["doc_types"] or "").split(","),
             }
-            for d in docs
+            for s in summaries
         ]
+
+    @app.get("/api/folders/{entity}/documents")
+    async def api_folder_docs(entity: str, page: int = 1, limit: int = 20):
+        docs, total = storage.get_documents_by_entity(config, entity, page, limit)
+        return {
+            "docs": [_fmt_doc(d) for d in docs],
+            "total": total,
+            "page": page,
+            "pages": max(1, -(-total // limit)),
+        }
+
+    @app.get("/api/documents/search")
+    async def api_search(q: str = "", page: int = 1, limit: int = 20):
+        if not q.strip():
+            return {"docs": [], "total": 0, "page": 1, "pages": 0}
+        docs, total = storage.search_documents(config, q.strip(), page, limit)
+        return {
+            "docs": [_fmt_doc(d) for d in docs],
+            "total": total,
+            "page": page,
+            "pages": max(1, -(-total // limit)),
+        }
 
     @app.delete("/api/documents/{doc_id}", status_code=200)
     async def api_delete_document(doc_id: int):

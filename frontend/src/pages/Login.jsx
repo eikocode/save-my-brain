@@ -72,8 +72,8 @@ export default function Login() {
               <div className="login-header">
                 <h1>{mode === 'login' ? t('welcome_back') : t('create_account')}</h1>
                 <p>{mode === 'login'
-                  ? 'Securely access your household dashboard.'
-                  : 'Start organizing your household documents.'
+                  ? 'Securely access your dashboard.'
+                  : 'Start organising your business documents.'
                 }</p>
               </div>
 

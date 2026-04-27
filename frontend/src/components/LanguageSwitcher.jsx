@@ -1,12 +1,6 @@
-/**
- * LanguageSwitcher.jsx — EN / ZH-TW / JA toggle
- * Used on Landing and Privacy pages (public, no auth).
- */
-
 const LANGUAGES = [
   { code: "en", label: "EN" },
   { code: "zh-tw", label: "繁中" },
-  { code: "ja", label: "日本語" },
 ];
 
 export default function LanguageSwitcher({ lang, onChange }) {

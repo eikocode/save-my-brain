@@ -1,6 +1,6 @@
 {
   "app_name": "拯救腦細胞AI管理大師",
-  "tagline": "生活雜務不應該耗盡你的腦細胞。",
+  "tagline": "創業不應該耗盡你的腦細胞。",
   "login": "登入",
   "register": "註冊",
   "email": "電郵",
@@ -29,10 +29,10 @@
     "logout": "登出"
   },
   "landing": {
-    "pill": "免費 · 毋需註冊",
-    "headline": "拯救腦細胞 告別家庭文件煩惱",
-    "tagline": "生活雜務不應該耗盡你的腦細胞。",
-    "sub": "上傳銀行月結單、保險、帳單、單據。AI自動整理、追蹤截止日期、即時回答問題 — 讓你不用再煩。",
+    "pill": "免費試用 · 毋需信用卡",
+    "headline": "拯救腦細胞 告別商業文件煩惱",
+    "tagline": "創業不應該耗盡你的腦細胞。",
+    "sub": "將發票、收據、合約、銀行月結單傳送到Telegram。AI自動閱讀、整理、回答問題 — 讓你專注在真正能讓業務成長的事。",
     "cta": "在Telegram開始 ✈️",
     "qr_label": "📱 用手機掃描",
     "metrics": {
@@ -46,32 +46,32 @@
     "how_title": "如何使用",
     "how_sub": "三個步驟，就這麼簡單。",
     "steps": [
-      { "emoji": "📎", "title": "上傳", "desc": "將任何PDF、照片或截圖傳送到Telegram。" },
-      { "emoji": "🧠", "title": "AI閱讀", "desc": "自動提取日期、金額、姓名和風險提示。" },
-      { "emoji": "💬", "title": "隨時提問", "desc": "「媽媽的保險幾時到期？」— 即時回答。" }
+      { "emoji": "📎", "title": "上傳", "desc": "將任何發票、收據、合約或月結單傳送到Telegram。" },
+      { "emoji": "🧠", "title": "AI閱讀", "desc": "自動提取金額、供應商、日期和風險提示。" },
+      { "emoji": "💬", "title": "隨時提問", "desc": "「上季度付了多少給會計師？」— 即時回答。" }
     ],
     "features_title": "AI幫你處理的事",
     "features": [
-      { "emoji": "📄", "title": "上傳任何文件", "desc": "PDF、照片、截圖、轉發電郵 — 全部都能讀。" },
-      { "emoji": "👨‍👩‍👧‍👦", "title": "全家共用", "desc": "最多8人。一個管理員掌握全部。" },
+      { "emoji": "📂", "title": "上傳任何文件", "desc": "發票、收據、合約、銀行月結單 — 全部都能讀。" },
+      { "emoji": "🧾", "title": "支出追蹤", "desc": "每筆交易自動記錄分類。報稅時輕鬆搞定。" },
       { "emoji": "🔔", "title": "智能提醒", "desc": "續期截止、帳單到期 — 絕不錯過。" },
-      { "emoji": "🛡️", "title": "風險偵測", "desc": "AI自動發現合約和保險中的風險條款。" },
-      { "emoji": "💬", "title": "隨時提問", "desc": "「哪份保險包括牙科？」用日常語言問就好。" },
+      { "emoji": "🛡️", "title": "風險偵測", "desc": "AI自動發現合約和供應商協議中的風險條款。" },
+      { "emoji": "💬", "title": "隨時提問", "desc": "「上個月付了多少給供應商？」用日常語言問就好。" },
       { "emoji": "🔒", "title": "隱私至上", "desc": "文件處理後即刪除。絕不出售，絕不分享。" }
     ],
-    "who_title": "告別家庭行政雜務",
+    "who_title": "專為獨立創業者而設",
     "personas": [
-      { "emoji": "💑", "title": "夫妻共管", "desc": "公平分擔家庭雜務，雙方都掌握狀況。" },
-      { "emoji": "👩‍👧‍👦", "title": "忙碌父母", "desc": "學校通知、保險、帳單，一個地方搞定。" },
-      { "emoji": "🏠", "title": "一家之主", "desc": "為全家人管理所有重要文件。" }
+      { "emoji": "🧑‍💻", "title": "獨立創辦人", "desc": "一個人撐起整間公司。讓AI替你處理文件雜務。" },
+      { "emoji": "🧾", "title": "自由工作者", "desc": "發票、合約、客戶付款，不用試算表也能搞定。" },
+      { "emoji": "🏪", "title": "小型企業主", "desc": "供應商、收據、續期，一個腦袋全部記住。" }
     ],
     "pricing_title": "簡單透明的定價",
-    "pricing_trial": { "name": "免費試用", "price": "免費", "duration": "7天", "docs": "3份文件", "features": ["所有文件處理功能", "智能提醒", "家庭群組", "聊天問答"] },
-    "pricing_annual": { "name": "年度計劃", "price": "US$79", "duration": "/年", "docs": "無限文件", "features": ["試用版所有功能", "無限上傳", "電郵+LINE通知", "優先客戶支援"] },
+    "pricing_trial": { "name": "免費試用", "price": "免費", "duration": "7天", "docs": "3份文件", "features": ["所有文件處理功能", "智能提醒", "聊天問答"] },
+    "pricing_annual": { "name": "年度計劃", "price": "US$79", "duration": "/年", "docs": "無限文件", "features": ["試用版所有功能", "無限上傳", "電郵+Telegram通知", "優先客戶支援"] },
     "pricing_lifetime": { "name": "終身計劃", "price": "US$200", "duration": "一次性付款", "docs": "永久無限", "badge": "最划算", "features": ["年度版所有功能", "所有未來新功能", "一次付款，永久使用"] },
     "pricing_cta": "在Telegram免費開始",
     "bottom_headline": "準備好拯救你的腦細胞了嗎？",
-    "bottom_sub": "免費。毋需註冊。掃描即開始。",
+    "bottom_sub": "7天免費試用。毋需信用卡。",
     "footer_company": "Santo Star Limited",
     "footer_privacy": "私隱政策",
     "footer_bot": "Telegram機器人"
@@ -99,7 +99,7 @@
     "section_billing": "計劃與付款",
     "section_calendar": "行事曆連接",
     "section_notifications": "通知渠道",
-    "section_group": "家庭／團隊群組",
+    "section_group": "團隊群組",
     "section_preferences": "偏好設定",
     "plan_trial": "免費試用",
     "plan_annual": "年度計劃",
@@ -128,7 +128,7 @@
     "group_invite": "生成邀請鏈接",
     "group_members": "成員",
     "group_remove": "移除",
-    "group_name_placeholder": "例如：Johnson家庭",
+    "group_name_placeholder": "例如：Acme有限公司",
     "language": "語言",
     "timezone": "時區",
     "brief_time": "每日簡報時間"
@@ -137,7 +137,7 @@
     "step_consent": "私隱與同意",
     "step_profile": "你的個人資料",
     "step_timezone": "時區與語言",
-    "step_household": "您的家庭",
+    "step_household": "你的業務",
     "step_telegram": "連接Telegram",
     "consent_title": "開始之前——關於你的私隱",
     "consent_body": "拯救腦細胞AI管理大師使用AI處理你的文件以提取摘要。以下是具體流程：\n\n• 你的文件由Claude AI（Anthropic）處理\n• 處理完成後，原始文件會被刪除——我們只保存摘要\n• 你的數據絕不會被出售或用於訓練AI模型\n• 你可以隨時刪除帳戶及所有數據",
@@ -146,7 +146,7 @@
     "profile_name_label": "你的名字",
     "profile_name_placeholder": "你希望AI怎麼稱呼你？",
     "profile_role_label": "你的主要身份",
-    "profile_role_options": ["個人用戶", "家長／家庭管理員", "小型企業主", "物業管理人", "其他"],
+    "profile_role_options": ["獨立創辦人", "自由工作者", "小型企業主", "物業管理人", "其他"],
     "tz_label": "你的時區",
     "lang_label": "偏好語言",
     "brief_time_label": "你希望何時收到每日簡報？",

@@ -1,7 +1,7 @@
 /**
  * ChatBox.jsx — Unified AI chat
  *
- * One chat that handles everything: onboarding, Q&A, household management.
+ * One chat that handles everything: onboarding, Q&A, document management.
  * No modes. No commands. Just talk naturally.
  *
  * Props:

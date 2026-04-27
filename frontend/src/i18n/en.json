@@ -1,6 +1,6 @@
 {
   "app_name": "Save My Brain AI",
-  "tagline": "Because life admin shouldn't cost you brain cells.",
+  "tagline": "Leave the boring bits to AI.",
   "login": "Log In",
   "register": "Sign Up",
   "email": "Email",
@@ -29,10 +29,10 @@
     "logout": "Log Out"
   },
   "landing": {
-    "pill": "Free · No signup required",
-    "headline": "Save your brain from household paperwork",
-    "tagline": "Because life admin shouldn't cost you brain cells.",
-    "sub": "Upload bank statements, insurance, bills, receipts. AI organizes, tracks deadlines, and answers questions — so you don't have to.",
+    "pill": "Free trial · No credit card required",
+    "headline": "Save your Brain from Life Admin",
+    "tagline": "Leave the boring bits to AI.",
+    "sub": "Drop invoices, receipts, contracts, and bank statements into Telegram, your browser, or your cloud drive. AI reads, organises, and answers — so you can focus on what actually grows your business.",
     "cta": "Open on Telegram ✈️",
     "qr_label": "📱 Scan with your phone",
     "metrics": {
@@ -46,32 +46,32 @@
     "how_title": "How it works",
     "how_sub": "Three steps. That's it.",
     "steps": [
-      { "emoji": "📎", "title": "Upload", "desc": "Drop any PDF, photo, or screenshot into Telegram." },
-      { "emoji": "🧠", "title": "AI Reads", "desc": "Extracts dates, amounts, names, and red flags automatically." },
-      { "emoji": "💬", "title": "Ask Anything", "desc": "\"When does Mom's insurance expire?\" — instant answer." }
+      { "emoji": "📎", "title": "Upload your way", "desc": "Send via Telegram, drag & drop in the browser, or connect Google Drive, Dropbox, or OneDrive." },
+      { "emoji": "🧠", "title": "AI Reads", "desc": "Extracts amounts, vendors, dates, and red flags automatically." },
+      { "emoji": "💬", "title": "Ask Anything", "desc": "\"What did I pay my accountant last quarter?\" — instant answer." }
     ],
     "features_title": "What your AI handles",
     "features": [
-      { "emoji": "📄", "title": "Upload anything", "desc": "PDFs, photos, screenshots, forwarded emails — we read it all." },
-      { "emoji": "👨‍👩‍👧‍👦", "title": "Whole family", "desc": "Up to 8 people. One admin sees everything." },
+      { "emoji": "📂", "title": "Upload anything", "desc": "Invoices, receipts, contracts, bank statements — we read it all." },
+      { "emoji": "🧾", "title": "Expense tracking", "desc": "Every transaction logged and categorised automatically. Tax time sorted." },
       { "emoji": "🔔", "title": "Smart alerts", "desc": "Renewal deadlines, payment due dates — never miss one." },
-      { "emoji": "🛡️", "title": "Red flag detection", "desc": "AI spots risky clauses in contracts and insurance." },
-      { "emoji": "💬", "title": "Ask anything", "desc": "\"Which policy covers dental?\" Plain English questions." },
+      { "emoji": "☁️", "title": "Connect your cloud", "desc": "Link Google Drive, Dropbox, or OneDrive. Any file you save there gets processed automatically." },
+      { "emoji": "💬", "title": "Telegram + Web chat", "desc": "Ask questions, search your documents, and get instant answers — on Telegram or from any browser." },
       { "emoji": "🔒", "title": "Privacy-first", "desc": "Documents processed then deleted. Never sold, never shared." }
     ],
-    "who_title": "Say goodbye to household admin chores",
+    "who_title": "Built for solo operators",
     "personas": [
-      { "emoji": "💑", "title": "Couples", "desc": "Split household admin fairly. Both stay in the loop." },
-      { "emoji": "👩‍👧‍👦", "title": "Busy parents", "desc": "School letters, insurance, bills — all in one place." },
-      { "emoji": "🏠", "title": "Head of household", "desc": "Managing documents for the whole family." }
+      { "emoji": "🧑‍💻", "title": "Solo founder", "desc": "One person, every hat. Let AI take the paperwork off your plate." },
+      { "emoji": "🧾", "title": "Freelancer", "desc": "Track invoices, contracts, and client payments without a spreadsheet." },
+      { "emoji": "🏪", "title": "Small business owner", "desc": "Vendors, receipts, renewals — one brain handles it all." }
     ],
     "pricing_title": "Simple, honest pricing",
-    "pricing_trial": { "name": "Free Trial", "price": "Free", "duration": "7 days", "docs": "3 documents", "features": ["All document processing", "Smart alerts", "Family group", "Chat Q&A"] },
-    "pricing_annual": { "name": "Annual", "price": "US$79", "duration": "/year", "docs": "Unlimited documents", "features": ["Everything in Trial", "Unlimited uploads", "Email + LINE alerts", "Priority support"] },
-    "pricing_lifetime": { "name": "Lifetime", "price": "US$200", "duration": "one-time", "docs": "Unlimited forever", "badge": "Best Value", "features": ["Everything in Annual", "All future features", "Pay once, done"] },
+    "pricing_trial": { "name": "Free Trial", "price": "Free", "duration": "7 days", "docs": "3 documents", "features": ["All document processing", "Smart alerts", "Chat Q&A"] },
+    "pricing_annual": { "name": "Annual", "price": "US$79", "duration": "/year", "docs": "Unlimited documents", "features": ["Everything in Trial", "Unlimited uploads", "Cloud drive sync (Google Drive, Dropbox, OneDrive)", "Email + Telegram alerts", "Priority support"] },
+    "pricing_lifetime": { "name": "Lifetime", "price": "US$200", "duration": "one-time", "docs": "Unlimited forever", "badge": "Best Value", "features": ["Everything in Annual", "Web chat interface", "All future features", "Pay once, done"] },
     "pricing_cta": "Start Free on Telegram",
     "bottom_headline": "Ready to save your brain?",
-    "bottom_sub": "Free. No signup. Just scan and go.",
+    "bottom_sub": "7-day free trial. No credit card required.",
     "footer_company": "Santo Star Limited",
     "footer_privacy": "Privacy Policy",
     "footer_bot": "Telegram Bot"
@@ -99,7 +99,7 @@
     "section_billing": "Plan & Billing",
     "section_calendar": "Calendar Connections",
     "section_notifications": "Notification Channels",
-    "section_group": "Family / Team Group",
+    "section_group": "Team Group",
     "section_preferences": "Preferences",
     "plan_trial": "Free Trial",
     "plan_annual": "Annual Plan",
@@ -128,7 +128,7 @@
     "group_invite": "Generate Invite Link",
     "group_members": "Members",
     "group_remove": "Remove",
-    "group_name_placeholder": "e.g. Johnson Family",
+    "group_name_placeholder": "e.g. Acme Ltd",
     "language": "Language",
     "timezone": "Timezone",
     "brief_time": "Daily Brief Time"
@@ -137,7 +137,7 @@
     "step_consent": "Privacy & Consent",
     "step_profile": "Your Profile",
     "step_timezone": "Timezone & Language",
-    "step_household": "Your Household",
+    "step_household": "Your Business",
     "step_telegram": "Connect Telegram",
     "consent_title": "Before we start — your privacy",
     "consent_body": "Save My Brain AI processes your documents using AI to extract summaries. Here's exactly what happens:\n\n• Your documents are processed by Claude AI (Anthropic)\n• After processing, original files are deleted — we keep summaries only\n• Your data is never sold or used to train AI models\n• You can delete your account and all data at any time",
@@ -146,7 +146,7 @@
     "profile_name_label": "Your name",
     "profile_name_placeholder": "How should your AI call you?",
     "profile_role_label": "Your main role",
-    "profile_role_options": ["Individual", "Parent / Family Admin", "Small Business Owner", "Property Manager", "Other"],
+    "profile_role_options": ["Solo Founder", "Freelancer", "Small Business Owner", "Property Manager", "Other"],
     "tz_label": "Your timezone",
     "lang_label": "Preferred language",
     "brief_time_label": "When do you want your daily brief?",

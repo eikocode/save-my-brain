@@ -59,14 +59,14 @@ export default function Layout({ children }) {
           <span>Add Document</span>
         </button>
 
-        {/* Family members */}
+        {/* Team members */}
         {familyMembers.length > 0 && (
           <div className="dash-sidebar-section">
-            <div className="dash-sidebar-section-label">Family</div>
+            <div className="dash-sidebar-section-label">Team</div>
             {familyMembers.map(fm => (
               <div key={fm.id} className="dash-family-item">
                 <span className="dash-family-avatar">
-                  {fm.relationship === 'self' ? '👤' : fm.relationship === 'sister' ? '👧' : fm.relationship === 'brother' ? '👦' : fm.relationship === 'father' || fm.relationship === 'dad' ? '👨' : fm.relationship === 'mother' || fm.relationship === 'mom' ? '👩' : '👥'}
+                  {fm.relationship === 'self' ? '👤' : '👥'}
                 </span>
                 <div>
                   <div className="dash-family-name">{fm.name}</div>
