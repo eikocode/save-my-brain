@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { clearAuth, getUser, apiFetch } from '../auth.js'
 
 const navItems = [
+  { path: '/home', label: 'Dashboard', icon: '🏠' },
   { path: '/library', label: 'Library', icon: '📚' },
   { path: '/settings', label: 'Settings', icon: '⚙️' },
 ]

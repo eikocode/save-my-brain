@@ -40,7 +40,7 @@ export default function Login() {
       } else if (!data.user?.onboarding_complete) {
         navigate('/onboarding')
       } else {
-        navigate('/library')
+        navigate('/home')
       }
     } catch {
       setError('Could not connect to server')

@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { isLoggedIn } from './auth.js'
 import Login from './pages/Login.jsx'
 import Landing from './pages/Landing.jsx'
+import Home from './pages/Home.jsx'
 import Library from './pages/Library.jsx'
 import Settings from './pages/Settings.jsx'
 import Privacy from './pages/Privacy.jsx'
@@ -50,11 +51,12 @@ export default function App() {
         <Route path="/onboarding" element={<Onboarding />} />
 
         {/* Protected routes */}
+        <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/library" element={<ProtectedRoute><Library /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
 
-        {/* Redirects from old routes */}
-        <Route path="/dashboard" element={<Navigate to="/library" replace />} />
+        {/* Redirects */}
+        <Route path="/dashboard" element={<Navigate to="/home" replace />} />
         <Route path="/documents" element={<Navigate to="/library" replace />} />
       </Routes>
     </BrowserRouter>

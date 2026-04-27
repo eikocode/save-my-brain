@@ -150,18 +150,61 @@ def create_app(config: Config) -> FastAPI:
         return {"id": doc_id, "filename": file.filename, "doc_type": result.doc_type,
                 "summary": result.summary}
 
+    def _build_doc_context(docs: list[dict]) -> str:
+        lines = []
+        for d in docs:
+            lines.append(
+                f"- [{d.get('doc_type','?')}] {d.get('issuer') or d.get('filename')} "
+                f"| date: {d.get('doc_date') or 'unknown'} "
+                f"| amount: {d.get('currency','')} {d.get('total') or 'N/A'} "
+                f"| summary: {(d.get('summary') or '')[:300]}"
+            )
+        return "\n".join(lines)
+
+    @app.get("/api/insights")
+    async def api_insights():
+        docs = storage.get_documents(config, limit=50)
+        if not docs:
+            return {"cards": [], "generated_at": None}
+        context = _build_doc_context(docs)
+        prompt = (
+            "You are an AI financial assistant. Analyse the user's documents below and "
+            "return a JSON array of exactly 6 insight cards. Each card must have these fields:\n"
+            "  icon (single emoji), title (short label), value (the key number or date), "
+            "detail (one concise sentence of context)\n\n"
+            "Focus on: total spend by category, upcoming renewals or due dates, largest single expense, "
+            "spending trends, any alerts or anomalies worth flagging.\n"
+            "Return ONLY valid JSON — no markdown, no explanation.\n\n"
+            f"Documents:\n{context}"
+        )
+        try:
+            import anthropic, json as _json
+            client = anthropic.Anthropic(api_key=config.anthropic_api_key)
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1024,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = resp.content[0].text.strip()
+            # strip markdown fences if present
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            cards = _json.loads(raw.strip())
+            from datetime import datetime, timezone
+            return {"cards": cards, "generated_at": datetime.now(timezone.utc).isoformat()}
+        except Exception as e:
+            return {"cards": [], "error": str(e)}
+
     @app.post("/api/chat")
     async def api_chat(request: Request):
         body = await request.json()
         msg = (body.get("message") or "").strip()
         if not msg:
             return {"message": ""}
-        docs = storage.get_documents(config, limit=20)
-        context = "\n".join(
-            f"- [{d.get('doc_type','?')}] {d.get('issuer') or d.get('filename')} "
-            f"{d.get('doc_date','')} {d.get('currency','')} {d.get('total') or ''}"
-            for d in docs
-        )
+        docs = storage.get_documents(config, limit=50)
+        context = _build_doc_context(docs)
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=config.anthropic_api_key)
@@ -169,8 +212,9 @@ def create_app(config: Config) -> FastAPI:
                 model="claude-haiku-4-5-20251001",
                 max_tokens=512,
                 system=(
-                    "You are Save My Brain AI, a business document assistant. "
-                    "Answer questions based on the user's saved documents. Be concise.\n\n"
+                    "You are Save My Brain AI, a personal finance assistant. "
+                    "Answer questions based on the user's saved documents. Be concise and specific — "
+                    "use actual numbers and dates from the documents when available.\n\n"
                     f"Documents on file:\n{context or 'None yet.'}"
                 ),
                 messages=[{"role": "user", "content": msg}],
