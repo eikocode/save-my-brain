@@ -170,6 +170,79 @@ def create_app(config: Config) -> FastAPI:
             )
         return "\n".join(lines)
 
+    @app.get("/api/dashboard")
+    async def api_dashboard():
+        from datetime import datetime, timezone
+        with storage.get_db(config) as conn:
+            # Total expenses (all time)
+            total_spent = conn.execute(
+                "SELECT SUM(amount) FROM transactions WHERE direction='expense'"
+            ).fetchone()[0] or 0
+
+            # This month
+            month = datetime.now(timezone.utc).strftime("%Y-%m")
+            month_spent = conn.execute(
+                "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND date LIKE ?",
+                (f"{month}%",)
+            ).fetchone()[0] or 0
+            month_income = conn.execute(
+                "SELECT SUM(amount) FROM transactions WHERE direction='income' AND date LIKE ?",
+                (f"{month}%",)
+            ).fetchone()[0] or 0
+
+            # Category breakdown (expenses only)
+            cats = conn.execute(
+                """SELECT category, SUM(amount) as total, COUNT(*) as count
+                   FROM transactions WHERE direction='expense' AND category != 'rewards'
+                   GROUP BY category ORDER BY total DESC"""
+            ).fetchall()
+
+            # Recent transactions (last 15)
+            recent = conn.execute(
+                """SELECT date, merchant, amount, currency, category, direction
+                   FROM transactions ORDER BY date DESC LIMIT 15"""
+            ).fetchall()
+
+            # Doc + transaction counts
+            doc_count = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+            txn_count = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+
+            # Currency (most common)
+            currency = conn.execute(
+                "SELECT currency FROM transactions GROUP BY currency ORDER BY COUNT(*) DESC LIMIT 1"
+            ).fetchone()
+            currency = currency[0] if currency else "HKD"
+
+        cat_total = sum(r[1] for r in cats) or 1
+        return {
+            "currency": currency,
+            "total_spent": round(total_spent, 2),
+            "month_spent": round(month_spent, 2),
+            "month_income": round(month_income, 2),
+            "doc_count": doc_count,
+            "txn_count": txn_count,
+            "categories": [
+                {
+                    "name": r[0],
+                    "total": round(r[1], 2),
+                    "count": r[2],
+                    "pct": round(r[1] / cat_total * 100, 1),
+                }
+                for r in cats
+            ],
+            "recent": [
+                {
+                    "date": r[0],
+                    "merchant": r[1],
+                    "amount": round(r[2], 2),
+                    "currency": r[3],
+                    "category": r[4],
+                    "direction": r[5],
+                }
+                for r in recent
+            ],
+        }
+
     @app.get("/api/insights")
     async def api_insights():
         docs = storage.get_documents(config, limit=50)
