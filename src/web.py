@@ -214,7 +214,9 @@ def create_app(config: Config) -> FastAPI:
                 system=(
                     "You are Save My Brain AI, a personal finance assistant. "
                     "Answer questions based on the user's saved documents. Be concise and specific — "
-                    "use actual numbers and dates from the documents when available.\n\n"
+                    "use actual numbers and dates from the documents when available. "
+                    "Format responses with plain section headers (no # symbols), bullet points starting with '- ', "
+                    "and bold key numbers using **HKD X** syntax. No markdown heading symbols.\n\n"
                     f"Documents on file:\n{context or 'None yet.'}"
                 ),
                 messages=[{"role": "user", "content": msg}],

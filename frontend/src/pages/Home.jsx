@@ -2,6 +2,43 @@ import { useEffect, useRef, useState } from "react";
 import Layout from "../components/Layout";
 import { apiFetch } from "../auth";
 
+function MarkdownText({ text }) {
+  const lines = text.split("\n");
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+      {lines.map((line, i) => {
+        if (!line.trim()) return <div key={i} style={{ height: "6px" }} />;
+        // ## heading
+        if (line.startsWith("## ")) {
+          const content = line.slice(3).replace(/\*\*/g, "");
+          return <div key={i} style={{ fontWeight: 700, fontSize: "13px", marginTop: "8px", color: "var(--color-accent)" }}>{content}</div>;
+        }
+        // ### heading
+        if (line.startsWith("### ")) {
+          const content = line.slice(4).replace(/\*\*/g, "");
+          return <div key={i} style={{ fontWeight: 700, fontSize: "13px", marginTop: "6px" }}>{content}</div>;
+        }
+        // bullet
+        const isBullet = line.startsWith("- ") || line.startsWith("• ");
+        const content = (isBullet ? line.slice(2) : line).replace(/\*\*(.+?)\*\*/g, "§BOLD§$1§END§");
+        const parts = content.split(/(§BOLD§.+?§END§)/);
+        const rendered = parts.map((p, j) => {
+          if (p.startsWith("§BOLD§") && p.endsWith("§END§")) {
+            return <strong key={j}>{p.slice(6, -5)}</strong>;
+          }
+          return p;
+        });
+        return (
+          <div key={i} style={{ display: "flex", gap: "6px", alignItems: "flex-start" }}>
+            {isBullet && <span style={{ opacity: 0.5, flexShrink: 0 }}>·</span>}
+            <span>{rendered}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const CARD_COLORS = [
   "var(--color-accent)",
   "#10b981",
@@ -171,10 +208,10 @@ export default function Home() {
                 borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                 padding: "10px 14px",
                 fontSize: "14px",
-                lineHeight: 1.5,
+                lineHeight: 1.6,
                 border: m.role === "ai" ? "1px solid var(--color-border)" : "none",
               }}>
-                {m.text}
+                {m.role === "ai" ? <MarkdownText text={m.text} /> : m.text}
               </div>
             ))}
             {chatLoading && (
