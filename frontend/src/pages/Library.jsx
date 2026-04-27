@@ -249,6 +249,18 @@ export default function Library() {
     return d.filename?.toLowerCase().includes(q) || d.summary?.toLowerCase().includes(q) || d.doc_type?.toLowerCase().includes(q);
   });
 
+  async function handleDelete(e, docId) {
+    e.stopPropagation();
+    if (!confirm('Delete this document and all its data?')) return;
+    try {
+      await apiFetch(`/api/documents/${docId}`, { method: 'DELETE' });
+      setDocs(prev => prev.filter(d => d.id !== docId));
+      if (expandedDoc === docId) setExpandedDoc(null);
+    } catch {
+      alert('Could not delete. Please try again.');
+    }
+  }
+
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   // Mobile: simple hub pointing to Telegram
@@ -465,6 +477,16 @@ export default function Library() {
                         <span>{doc.uploaded_at?.slice(0, 10)}</span>
                       </div>
                     </div>
+                    <button
+                      onClick={(e) => handleDelete(e, doc.id)}
+                      style={{
+                        marginLeft: 'auto', background: 'none', border: 'none',
+                        color: 'var(--color-text-faint)', cursor: 'pointer',
+                        fontSize: '16px', padding: '4px 8px', borderRadius: '6px',
+                        flexShrink: 0,
+                      }}
+                      title="Delete document"
+                    >🗑️</button>
                   </div>
                   {isExpanded && doc.summary && (
                     <div className="dash-doc-detail">

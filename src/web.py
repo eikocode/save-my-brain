@@ -66,6 +66,11 @@ def create_app(config: Config) -> FastAPI:
             for d in docs
         ]
 
+    @app.delete("/api/documents/{doc_id}", status_code=200)
+    async def api_delete_document(doc_id: int):
+        storage.delete_document(config, doc_id)
+        return {"ok": True}
+
     @app.post("/api/documents/upload", status_code=201)
     async def api_upload(file: UploadFile = File(...)):
         suffix = Path(file.filename or "upload").suffix or ".pdf"
