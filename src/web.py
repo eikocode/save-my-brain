@@ -234,82 +234,91 @@ def create_app(config: Config) -> FastAPI:
 
     @app.get("/api/dashboard")
     async def api_dashboard(month: str = ""):
-        from datetime import datetime, timezone
+        # month="" means all-time (the default)
         EXCLUDE = ('transfer', 'rewards', 'misc')
+        date_filter = f"{month}%" if month else "%"
 
         with storage.get_db(config) as conn:
             # Available months for picker
-            months_raw = conn.execute(
-                """SELECT DISTINCT substr(date,1,7) as m FROM transactions
-                   WHERE date IS NOT NULL ORDER BY m DESC"""
-            ).fetchall()
-            available_months = [r[0] for r in months_raw if r[0]]
+            available_months = [
+                r[0] for r in conn.execute(
+                    "SELECT DISTINCT substr(date,1,7) FROM transactions WHERE date IS NOT NULL ORDER BY 1 DESC"
+                ).fetchall() if r[0]
+            ]
 
-            # Default: most recent month with data
-            if not month and available_months:
-                month = available_months[0]
-
-            # Total tracked (all time)
+            # Total tracked (always all-time)
             total_spent = conn.execute(
                 "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN (?,?,?)",
                 EXCLUDE
             ).fetchone()[0] or 0
 
-            # Selected period spend
+            # Period spend
             period_spent = conn.execute(
                 "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN (?,?,?) AND date LIKE ?",
-                (*EXCLUDE, f"{month}%")
+                (*EXCLUDE, date_filter)
             ).fetchone()[0] or 0
 
-            # Previous month spend (for delta)
+            # Previous month spend (for delta — only meaningful when a month is selected)
+            prev_spent = 0
+            prev_month = ""
             if month and len(month) == 7:
                 yr, mo = int(month[:4]), int(month[5:])
                 prev_mo = mo - 1 or 12
                 prev_yr = yr if mo > 1 else yr - 1
                 prev_month = f"{prev_yr:04d}-{prev_mo:02d}"
-            else:
-                prev_month = ""
-            prev_spent = conn.execute(
-                "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN (?,?,?) AND date LIKE ?",
-                (*EXCLUDE, f"{prev_month}%")
-            ).fetchone()[0] or 0 if prev_month else 0
+                prev_spent = conn.execute(
+                    "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN (?,?,?) AND date LIKE ?",
+                    (*EXCLUDE, f"{prev_month}%")
+                ).fetchone()[0] or 0
 
-            # Category breakdown for selected period
+            # Category breakdown
             cats = conn.execute(
                 """SELECT category, SUM(amount) as total, COUNT(*) as count
                    FROM transactions
                    WHERE direction='expense' AND category NOT IN (?,?,?) AND date LIKE ?
                    GROUP BY category ORDER BY total DESC""",
-                (*EXCLUDE, f"{month}%")
+                (*EXCLUDE, date_filter)
             ).fetchall()
-            # Fall back to all-time if month has no data
-            if not cats:
-                cats = conn.execute(
-                    """SELECT category, SUM(amount) as total, COUNT(*) as count
-                       FROM transactions WHERE direction='expense' AND category NOT IN (?,?,?)
-                       GROUP BY category ORDER BY total DESC""",
-                    EXCLUDE
-                ).fetchall()
-                month = ""  # signal to frontend: showing all-time
 
-            # Recent transactions (exclude transfers)
+            # Top merchant per category
+            top_merchants = {}
+            for cat, _, _ in cats:
+                row = conn.execute(
+                    """SELECT merchant, SUM(amount) as s FROM transactions
+                       WHERE category=? AND direction='expense' AND date LIKE ?
+                       GROUP BY merchant ORDER BY s DESC LIMIT 1""",
+                    (cat, date_filter)
+                ).fetchone()
+                if row:
+                    top_merchants[cat] = _clean_merchant(row[0])
+
+            # Recent transactions — filtered to month, excluding transfers
             recent = conn.execute(
                 """SELECT date, merchant, amount, currency, category, direction
                    FROM transactions
-                   WHERE category != 'transfer'
-                   ORDER BY date DESC LIMIT 15"""
+                   WHERE category != 'transfer' AND date LIKE ?
+                   ORDER BY date DESC LIMIT 20""",
+                (date_filter,)
             ).fetchall()
 
-            # Counts
+            # Spending trend: monthly totals for last 8 months
+            trend_rows = conn.execute(
+                """SELECT substr(date,1,7) as m, SUM(amount) as total
+                   FROM transactions
+                   WHERE direction='expense' AND category NOT IN (?,?,?) AND date IS NOT NULL
+                   GROUP BY m ORDER BY m DESC LIMIT 8""",
+                EXCLUDE
+            ).fetchall()
+
+            # Counts (all-time)
             doc_count = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
             txn_count = conn.execute(
                 "SELECT COUNT(*) FROM transactions WHERE category != 'transfer'"
             ).fetchone()[0]
 
-            currency = conn.execute(
+            currency = (conn.execute(
                 "SELECT currency FROM transactions GROUP BY currency ORDER BY COUNT(*) DESC LIMIT 1"
-            ).fetchone()
-            currency = currency[0] if currency else "HKD"
+            ).fetchone() or ["HKD"])[0]
 
         cat_total = sum(r[1] for r in cats) or 1
         delta_pct = round((period_spent - prev_spent) / prev_spent * 100, 1) if prev_spent else None
@@ -330,6 +339,7 @@ def create_app(config: Config) -> FastAPI:
                     "total": round(r[1], 2),
                     "count": r[2],
                     "pct": round(r[1] / cat_total * 100, 1),
+                    "top_merchant": top_merchants.get(r[0], ""),
                 }
                 for r in cats
             ],
@@ -343,6 +353,10 @@ def create_app(config: Config) -> FastAPI:
                     "direction": r[5],
                 }
                 for r in recent
+            ],
+            "trend": [
+                {"month": r[0], "total": round(r[1], 2)}
+                for r in reversed(trend_rows)
             ],
         }
 
