@@ -198,55 +198,130 @@ def create_app(config: Config) -> FastAPI:
             )
         return "\n".join(lines)
 
+    def _clean_merchant(name: str) -> str:
+        import re
+        if not name:
+            return name
+        # Strip payment prefixes
+        name = re.sub(r"^(BBMSL\*|KPAY\*|DNH\*|SQ \*)", "", name, flags=re.I)
+        # Known cleanups
+        replacements = {
+            "CITY SUPER LIMITED": "City Super",
+            "GREAT 255GPP": "Great",
+            "SOGO(CWB) SUPERMARKET": "Sogo Supermarket",
+            "SOGO CWB SUPERMARKET": "Sogo Supermarket",
+            "APPLE.COM/BILL HOLLYHILL": "Apple Subscriptions",
+            "THINKIFIC.COM VANCOUVER": "Thinkific",
+            "AAAACCELERATOR": "AAA Accelerator",
+            "Fleuria Fleuriste": "Fleuria",
+            "FLEURIA FLEURISTE": "Fleuria",
+            "BBMSLFLEURIA FLEURISTE": "Fleuria",
+            "Slowood HP Hong Kong": "Slowood",
+            "Slowood HP": "Slowood",
+            "American Express - Annual Fee": "Amex Annual Fee",
+            "Payment Received Through Autopay": "Credit Card Autopay",
+            "HSBC Autopay Payment": "Credit Card Autopay",
+            "PAID BY AUTOPAY": "Credit Card Autopay",
+            "Paid by Autopay": "Credit Card Autopay",
+        }
+        for old, new in replacements.items():
+            if old.lower() in name.lower():
+                return new
+        # Title-case if ALL CAPS
+        if name == name.upper() and len(name) > 3:
+            name = name.title()
+        return name
+
     @app.get("/api/dashboard")
-    async def api_dashboard():
+    async def api_dashboard(month: str = ""):
         from datetime import datetime, timezone
+        EXCLUDE = ('transfer', 'rewards', 'misc')
+
         with storage.get_db(config) as conn:
-            # Total expenses (all time, exclude transfers/rewards)
+            # Available months for picker
+            months_raw = conn.execute(
+                """SELECT DISTINCT substr(date,1,7) as m FROM transactions
+                   WHERE date IS NOT NULL ORDER BY m DESC"""
+            ).fetchall()
+            available_months = [r[0] for r in months_raw if r[0]]
+
+            # Default: most recent month with data
+            if not month and available_months:
+                month = available_months[0]
+
+            # Total tracked (all time)
             total_spent = conn.execute(
-                "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN ('transfer','rewards')"
+                "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN (?,?,?)",
+                EXCLUDE
             ).fetchone()[0] or 0
 
-            # This month
-            month = datetime.now(timezone.utc).strftime("%Y-%m")
-            month_spent = conn.execute(
-                "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN ('transfer','rewards') AND date LIKE ?",
-                (f"{month}%",)
-            ).fetchone()[0] or 0
-            month_income = conn.execute(
-                "SELECT SUM(amount) FROM transactions WHERE direction='income' AND date LIKE ?",
-                (f"{month}%",)
+            # Selected period spend
+            period_spent = conn.execute(
+                "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN (?,?,?) AND date LIKE ?",
+                (*EXCLUDE, f"{month}%")
             ).fetchone()[0] or 0
 
-            # Category breakdown (real expenses only, no transfers/rewards)
+            # Previous month spend (for delta)
+            if month and len(month) == 7:
+                yr, mo = int(month[:4]), int(month[5:])
+                prev_mo = mo - 1 or 12
+                prev_yr = yr if mo > 1 else yr - 1
+                prev_month = f"{prev_yr:04d}-{prev_mo:02d}"
+            else:
+                prev_month = ""
+            prev_spent = conn.execute(
+                "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN (?,?,?) AND date LIKE ?",
+                (*EXCLUDE, f"{prev_month}%")
+            ).fetchone()[0] or 0 if prev_month else 0
+
+            # Category breakdown for selected period
             cats = conn.execute(
                 """SELECT category, SUM(amount) as total, COUNT(*) as count
-                   FROM transactions WHERE direction='expense' AND category NOT IN ('transfer','rewards','misc')
-                   GROUP BY category ORDER BY total DESC"""
+                   FROM transactions
+                   WHERE direction='expense' AND category NOT IN (?,?,?) AND date LIKE ?
+                   GROUP BY category ORDER BY total DESC""",
+                (*EXCLUDE, f"{month}%")
             ).fetchall()
+            # Fall back to all-time if month has no data
+            if not cats:
+                cats = conn.execute(
+                    """SELECT category, SUM(amount) as total, COUNT(*) as count
+                       FROM transactions WHERE direction='expense' AND category NOT IN (?,?,?)
+                       GROUP BY category ORDER BY total DESC""",
+                    EXCLUDE
+                ).fetchall()
+                month = ""  # signal to frontend: showing all-time
 
-            # Recent transactions (last 15)
+            # Recent transactions (exclude transfers)
             recent = conn.execute(
                 """SELECT date, merchant, amount, currency, category, direction
-                   FROM transactions ORDER BY date DESC LIMIT 15"""
+                   FROM transactions
+                   WHERE category != 'transfer'
+                   ORDER BY date DESC LIMIT 15"""
             ).fetchall()
 
-            # Doc + transaction counts
+            # Counts
             doc_count = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
-            txn_count = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+            txn_count = conn.execute(
+                "SELECT COUNT(*) FROM transactions WHERE category != 'transfer'"
+            ).fetchone()[0]
 
-            # Currency (most common)
             currency = conn.execute(
                 "SELECT currency FROM transactions GROUP BY currency ORDER BY COUNT(*) DESC LIMIT 1"
             ).fetchone()
             currency = currency[0] if currency else "HKD"
 
         cat_total = sum(r[1] for r in cats) or 1
+        delta_pct = round((period_spent - prev_spent) / prev_spent * 100, 1) if prev_spent else None
+
         return {
             "currency": currency,
             "total_spent": round(total_spent, 2),
-            "month_spent": round(month_spent, 2),
-            "month_income": round(month_income, 2),
+            "period_spent": round(period_spent, 2),
+            "prev_spent": round(prev_spent, 2),
+            "delta_pct": delta_pct,
+            "selected_month": month,
+            "available_months": available_months,
             "doc_count": doc_count,
             "txn_count": txn_count,
             "categories": [
@@ -261,7 +336,7 @@ def create_app(config: Config) -> FastAPI:
             "recent": [
                 {
                     "date": r[0],
-                    "merchant": r[1],
+                    "merchant": _clean_merchant(r[1]),
                     "amount": round(r[2], 2),
                     "currency": r[3],
                     "category": r[4],
@@ -270,6 +345,27 @@ def create_app(config: Config) -> FastAPI:
                 for r in recent
             ],
         }
+
+    @app.get("/api/transactions/by-category")
+    async def api_txns_by_category(category: str, month: str = ""):
+        with storage.get_db(config) as conn:
+            sql = "SELECT date, merchant, amount, currency, direction FROM transactions WHERE category = ?"
+            params: list = [category]
+            if month:
+                sql += " AND date LIKE ?"
+                params.append(f"{month}%")
+            sql += " ORDER BY date DESC"
+            rows = conn.execute(sql, params).fetchall()
+        return [
+            {
+                "date": r[0],
+                "merchant": _clean_merchant(r[1]),
+                "amount": round(r[2], 2),
+                "currency": r[3],
+                "direction": r[4],
+            }
+            for r in rows
+        ]
 
     @app.get("/api/insights")
     async def api_insights():
