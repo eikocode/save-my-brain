@@ -202,15 +202,15 @@ def create_app(config: Config) -> FastAPI:
     async def api_dashboard():
         from datetime import datetime, timezone
         with storage.get_db(config) as conn:
-            # Total expenses (all time)
+            # Total expenses (all time, exclude transfers/rewards)
             total_spent = conn.execute(
-                "SELECT SUM(amount) FROM transactions WHERE direction='expense'"
+                "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN ('transfer','rewards')"
             ).fetchone()[0] or 0
 
             # This month
             month = datetime.now(timezone.utc).strftime("%Y-%m")
             month_spent = conn.execute(
-                "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND date LIKE ?",
+                "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN ('transfer','rewards') AND date LIKE ?",
                 (f"{month}%",)
             ).fetchone()[0] or 0
             month_income = conn.execute(
@@ -218,10 +218,10 @@ def create_app(config: Config) -> FastAPI:
                 (f"{month}%",)
             ).fetchone()[0] or 0
 
-            # Category breakdown (expenses only)
+            # Category breakdown (real expenses only, no transfers/rewards)
             cats = conn.execute(
                 """SELECT category, SUM(amount) as total, COUNT(*) as count
-                   FROM transactions WHERE direction='expense' AND category != 'rewards'
+                   FROM transactions WHERE direction='expense' AND category NOT IN ('transfer','rewards','misc')
                    GROUP BY category ORDER BY total DESC"""
             ).fetchall()
 

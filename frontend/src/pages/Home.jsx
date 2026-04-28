@@ -13,7 +13,8 @@ const CAT_EMOJI = {
   electronics: "📱", transport: "🚇", travel: "✈️", health: "💊",
   beauty: "💅", entertainment: "🎬", education: "📚",
   utilities: "💡", insurance: "🛡️", rent: "🏠", tax: "📋",
-  rewards: "🎁", misc: "📦",
+  rewards: "🎁", flowers: "💐", home: "🔧", banking: "🏦",
+  misc: "📦",
 };
 
 const CAT_LABEL = {
@@ -22,7 +23,8 @@ const CAT_LABEL = {
   travel: "Travel", health: "Health", beauty: "Beauty & Salon",
   entertainment: "Entertainment", education: "Education",
   utilities: "Utilities", insurance: "Insurance", rent: "Rent",
-  tax: "Tax", rewards: "Rewards", misc: "Other",
+  tax: "Tax", rewards: "Rewards", flowers: "Flowers & Gifts",
+  home: "Home & Maintenance", banking: "Bank Fees", misc: "Other",
 };
 
 function MarkdownText({ text }) {

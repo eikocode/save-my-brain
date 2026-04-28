@@ -70,8 +70,12 @@ Category rules — pick the most specific match:
 - "insurance": insurance premiums
 - "rent": rental income received or rent paid
 - "tax": tax payments, government fees
+- "flowers": florists, flower shops, gift shops
+- "home": locksmiths, repairs, home maintenance, hardware
+- "banking": bank fees, annual fees, credit card charges
 - "rewards": cashback, rebates, bank bonus credits, points redemptions
-- "misc": anything that doesn't fit above
+- "transfer": credit card autopay payments, balance transfers — money moving between your own accounts
+- "misc": anything that truly doesn't fit above (use sparingly)
 
 Direction rules — read these carefully:
 - "income": ONLY genuine income — rent received, salary, business revenue, interest earned
