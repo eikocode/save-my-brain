@@ -7,7 +7,7 @@
  * - Document library page: network-first, fallback to cache
  */
 
-const CACHE_NAME = "smb-v1";
+const CACHE_NAME = "smb-v4";
 const APP_SHELL = ["/", "/documents", "/settings", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 // Install: cache app shell
@@ -32,8 +32,15 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // API calls: always network-first
-  if (url.pathname.startsWith("/api/")) {
+  // API calls and JS/CSS source files: always network-first (never cache)
+  if (
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/src/") ||
+    url.pathname.startsWith("/@") ||
+    url.pathname.endsWith(".js") ||
+    url.pathname.endsWith(".jsx") ||
+    url.pathname.endsWith(".css")
+  ) {
     event.respondWith(
       fetch(event.request).catch(() =>
         new Response(JSON.stringify({ error: "Offline" }), {

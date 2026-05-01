@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import tempfile
 from pathlib import Path
 from urllib.parse import quote
@@ -13,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from .classifier import classify
 from .config import Config
 from .extractor import extract_document
-from . import exporter, storage
+from . import exporter, fx, score as score_mod, storage
 
 _TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 _CATEGORIES = ["rent", "utilities", "insurance", "management", "rewards", "misc"]
@@ -30,12 +31,16 @@ def create_app(config: Config) -> FastAPI:
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
     def _fmt_doc(d: dict) -> dict:
+        entity = d.get("entity") or "unknown"
+        raw_issuer = d.get("issuer") or ""
+        # Use entity alias for display if issuer maps to a known brand
+        display_issuer = _entity_display(entity) if entity != "unknown" else raw_issuer
         return {
             "id": d["id"],
-            "entity": d.get("entity") or "unknown",
+            "entity": entity,
             "filename": d.get("original_path") or "document",
             "doc_type": d.get("doc_type") or "other",
-            "issuer": d.get("issuer"),
+            "issuer": display_issuer,
             "doc_date": d.get("doc_date"),
             "currency": d.get("currency"),
             "total": d.get("total"),
@@ -47,10 +52,42 @@ def create_app(config: Config) -> FastAPI:
             "structured_data": None,
         }
 
+    _CORPORATE_TAIL = {
+        "clearing", "corporation", "limited", "ltd", "co",
+        "inc", "llc", "plc", "pte", "group", "holdings",
+        "international", "securities", "financial", "services",
+        "company", "enterprises", "asset", "management",
+    }
+    # Known clearing-house → brand mappings
+    _ENTITY_ALIASES = {
+        "apex clearing": "Firstrade",
+        "apex_clearing": "Firstrade",
+    }
+    _ALL_CAPS_BRANDS = {
+        "hsbc", "bea", "dbs", "uob", "ocbc", "icbc", "boc", "aia",
+        "mtr", "amex", "hkex", "bnp", "atm", "td", "etf", "ira",
+    }
+
     def _entity_display(entity: str) -> str:
         if not entity or entity == "unknown":
             return "Unclassified"
-        return entity.replace("_", " ").title()
+        # Check alias map first
+        key = entity.replace("_", " ").lower().strip()
+        for alias, canonical in _ENTITY_ALIASES.items():
+            if key.startswith(alias):
+                return canonical
+        words = entity.replace("_", " ").split()
+        # Strip trailing generic corporate words, keeping at least 2 words
+        while len(words) > 2 and words[-1].lower().rstrip(".") in _CORPORATE_TAIL:
+            words.pop()
+        # Apply casing: all-caps for known brands or originally-all-caps words
+        result = []
+        for word in words:
+            if word.lower().rstrip(".") in _ALL_CAPS_BRANDS or (len(word) > 1 and word.isupper()):
+                result.append(word.upper())
+            else:
+                result.append(word.capitalize())
+        return " ".join(result)
 
     # ── REST API endpoints (used by React frontend) ──────────────────────────
 
@@ -85,9 +122,12 @@ def create_app(config: Config) -> FastAPI:
                 "display_name": _entity_display(s["entity"]),
                 "doc_count": s["doc_count"],
                 "total_amount": round(s["total_amount"] or 0, 2),
+                "spending_total": s.get("spending_total", 0),
+                "account_count": s.get("account_count", 0),
                 "currency": s["currency"] or "HKD",
                 "last_updated": (s["last_updated"] or "")[:10],
                 "doc_types": (s["doc_types"] or "").split(","),
+                "breakdown": s.get("breakdown", []),
             }
             for s in summaries
         ]
@@ -142,9 +182,35 @@ def create_app(config: Config) -> FastAPI:
             headers={"Content-Disposition": "attachment; filename=savemybrain-transactions.csv"},
         )
 
+    @app.get("/api/documents/{doc_id}/transactions")
+    async def api_doc_transactions(doc_id: int):
+        with storage.get_db(config) as conn:
+            rows = conn.execute(
+                "SELECT date, merchant, amount, currency, category, direction, notes "
+                "FROM transactions WHERE document_id = ? ORDER BY date",
+                (doc_id,)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    @app.get("/api/documents/{doc_id}/holdings")
+    async def api_doc_holdings(doc_id: int):
+        with storage.get_db(config) as conn:
+            row = conn.execute(
+                "SELECT holdings FROM documents WHERE id = ?", (doc_id,)
+            ).fetchone()
+        if not row or not row["holdings"]:
+            return []
+        import json as _json
+        try:
+            return _json.loads(row["holdings"]) if isinstance(row["holdings"], str) else (row["holdings"] or [])
+        except Exception:
+            return []
+
     @app.delete("/api/documents/{doc_id}", status_code=200)
     async def api_delete_document(doc_id: int):
-        storage.delete_document(config, doc_id)
+        deleted = storage.delete_document(config, doc_id)
+        if not deleted:
+            return JSONResponse(status_code=404, content={"detail": f"Document {doc_id} not found"})
         return {"ok": True}
 
     @app.post("/api/documents/upload", status_code=201)
@@ -154,40 +220,130 @@ def create_app(config: Config) -> FastAPI:
             tf.write(await file.read())
             tmp_path = Path(tf.name)
 
+        if config.monthly_upload_limit > 0:
+            used = storage.count_uploads_this_month(config)
+            if used >= config.monthly_upload_limit:
+                tmp_path.unlink(missing_ok=True)
+                return JSONResponse(status_code=429, content={
+                    "detail": f"Monthly upload limit reached ({config.monthly_upload_limit} documents). Upgrade your plan to upload more."
+                })
+
         h = storage.file_hash(tmp_path)
         if storage.is_duplicate(config, h):
             tmp_path.unlink(missing_ok=True)
             return JSONResponse(status_code=409, content={"detail": "Duplicate — already processed"})
 
+        doc_id = None
+        result = None
+        entity = "unknown"
         try:
-            result = extract_document(config, tmp_path)
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, extract_document, config, tmp_path)
             classify(result, config.entities)
             from .bot import _entity_from_result
             entity = _entity_from_result(result)
+
+            # Insurance duplicate check: same policy number + same coverage year
+            if result.doc_type == "insurance" and result.reference_number:
+                existing = storage.find_insurance_duplicate(config, result.reference_number, result.coverage_period)
+                if existing:
+                    tmp_path.unlink(missing_ok=True)
+                    return JSONResponse(status_code=409, content={
+                        "detail": f"Duplicate — policy {result.reference_number} for this coverage period already saved (doc ID {existing['id']})"
+                    })
+
+            safe_total = storage.sanitise_statement_total(result.doc_type, result.total, result.transactions)
             doc_id = storage.save_document(
                 config, entity, result.doc_type, result.issuer,
-                result.doc_date, result.currency, result.total,
+                result.doc_date, result.currency, safe_total,
                 h, file.filename or "upload", result.summary,
+                result.reference_number, result.coverage_period,
+                result.holdings,
             )
-            storage.save_transactions(config, doc_id, entity, result.transactions)
+            txns = storage.filter_saveable_transactions(result.doc_type, result.total, result.transactions)
+            if not txns and result.doc_type == "insurance":
+                storage.zero_document_total(config, doc_id)
+            storage.save_transactions(config, doc_id, entity, txns)
         except Exception as e:
             tmp_path.unlink(missing_ok=True)
+            if "UNIQUE constraint failed" in str(e):
+                return JSONResponse(status_code=409, content={"detail": "Duplicate — already processed"})
+            # Document was already saved — anything that failed after is non-critical
+            if doc_id is not None:
+                return {"id": doc_id, "filename": file.filename,
+                        "doc_type": result.doc_type if result else "unknown", "summary": ""}
             return JSONResponse(status_code=422, content={"detail": str(e)})
 
         tmp_path.unlink(missing_ok=True)
-        return {"id": doc_id, "filename": file.filename, "doc_type": result.doc_type,
-                "summary": result.summary}
+        response: dict = {"id": doc_id, "filename": file.filename,
+                          "doc_type": result.doc_type, "summary": result.summary}
+        # Check if the new entity looks like an existing one
+        similar = storage.find_similar_entity(config, entity, result.issuer)
+        if similar:
+            response["suggested_merge"] = {
+                "new_entity": entity,
+                "new_issuer": result.issuer,
+                "existing_entity": similar["entity"],
+                "existing_issuer": similar["issuer"],
+                "pair_key": similar["pair_key"],
+            }
+        return response
+
+    @app.post("/api/entities/merge")
+    async def api_merge_entities(body: dict):
+        from_entity = body.get("from_entity", "")
+        to_entity = body.get("to_entity", "")
+        if not from_entity or not to_entity:
+            return JSONResponse(status_code=400, content={"detail": "from_entity and to_entity required"})
+        moved = storage.merge_entities(config, from_entity, to_entity)
+        return {"ok": True, "moved": moved, "into": to_entity}
+
+    @app.post("/api/entities/dismiss-merge")
+    async def api_dismiss_merge(body: dict):
+        pair_key = body.get("pair_key", "")
+        if not pair_key:
+            return JSONResponse(status_code=400, content={"detail": "pair_key required"})
+        storage.dismiss_merge(config, pair_key)
+        return {"ok": True}
+
+    @app.get("/api/alerts/renewals")
+    async def api_renewals(days: int = 60):
+        docs = storage.get_expiring_documents(config, days_ahead=days)
+        return [
+            {
+                "id": d["id"],
+                "entity": d.get("entity") or "unknown",
+                "issuer": d.get("issuer") or d.get("entity"),
+                "doc_type": d.get("doc_type"),
+                "reference_number": d.get("reference_number") or "",
+                "expiry_date": d["expiry_date"],
+                "days_remaining": d["days_remaining"],
+            }
+            for d in docs
+        ]
 
     def _build_full_context(docs: list[dict]) -> str:
+        import json as _json
         txns = storage.get_transactions(config)
         lines = ["=== DOCUMENTS ==="]
         for d in docs:
             lines.append(
-                f"[{d.get('doc_type','?')}] {d.get('issuer') or d.get('filename')} "
+                f"[{d.get('doc_type','?')}] {d.get('issuer') or d.get('original_path')} "
                 f"| date: {d.get('doc_date') or 'unknown'} "
-                f"| total: {d.get('currency','')} {d.get('total') or 'N/A'} "
-                f"| {(d.get('summary') or '')[:200]}"
+                f"| total: {d.get('currency','')} {d.get('total') or 'N/A'}"
             )
+            if d.get('summary'):
+                lines.append(f"  Summary: {d['summary']}")
+            holdings_raw = d.get('holdings')
+            if holdings_raw:
+                try:
+                    holdings = _json.loads(holdings_raw) if isinstance(holdings_raw, str) else holdings_raw
+                    if holdings:
+                        lines.append("  Holdings:")
+                        for h in holdings:
+                            lines.append(f"    - {h.get('name')} | {h.get('currency','')} {h.get('balance','')} | type: {h.get('type','')}")
+                except Exception:
+                    pass
         lines.append("\n=== TRANSACTIONS ===")
         for t in txns:
             lines.append(
@@ -202,129 +358,305 @@ def create_app(config: Config) -> FastAPI:
         import re
         if not name:
             return name
-        # Strip payment prefixes
-        name = re.sub(r"^(BBMSL\*|KPAY\*|DNH\*|SQ \*)", "", name, flags=re.I)
-        # Known cleanups
-        replacements = {
-            "CITY SUPER LIMITED": "City Super",
-            "GREAT 255GPP": "Great",
-            "SOGO(CWB) SUPERMARKET": "Sogo Supermarket",
-            "SOGO CWB SUPERMARKET": "Sogo Supermarket",
-            "APPLE.COM/BILL HOLLYHILL": "Apple Subscriptions",
-            "THINKIFIC.COM VANCOUVER": "Thinkific",
-            "AAAACCELERATOR": "AAA Accelerator",
-            "Fleuria Fleuriste": "Fleuria",
-            "FLEURIA FLEURISTE": "Fleuria",
-            "BBMSLFLEURIA FLEURISTE": "Fleuria",
-            "Slowood HP Hong Kong": "Slowood",
-            "Slowood HP": "Slowood",
-            "American Express - Annual Fee": "Amex Annual Fee",
-            "Payment Received Through Autopay": "Credit Card Autopay",
-            "HSBC Autopay Payment": "Credit Card Autopay",
-            "PAID BY AUTOPAY": "Credit Card Autopay",
-            "Paid by Autopay": "Credit Card Autopay",
-        }
-        for old, new in replacements.items():
-            if old.lower() in name.lower():
-                return new
-        # Title-case if ALL CAPS
+
+        # 1. Strip payment processor prefixes
+        name = re.sub(
+            r"^(BBMSL\*|KPAY\*|DNH\*|SQ \*|TST\*|STRIPE\*|PP\*|PAYPAL \*|AMZN\*|APL\*)",
+            "", name, flags=re.I,
+        ).strip()
+
+        # 2. Substring brand normalization — first match wins (most specific first)
+        _BRANDS = [
+            # Autopay / transfers
+            ("autopay", "Credit Card Autopay"),
+            ("paid by auto", "Credit Card Autopay"),
+            ("payment received", "Credit Card Autopay"),
+            # Apple
+            ("apple.com/bill", "Apple Subscriptions"),
+            ("apple subscriptions", "Apple Subscriptions"),
+            # Known merchants
+            ("city super", "City Super"),
+            ("aaaaccelerator", "AAA Accelerator"),
+            ("thinkific", "Thinkific"),
+            ("fleuria", "Fleuria"),
+            ("slowood", "Slowood"),
+            ("great food", "Great"),
+            ("great 2", "Great"),
+            ("sogo", "Sogo"),
+            ("american express", "Amex Annual Fee"),
+            ("amex annual", "Amex Annual Fee"),
+            # F&B chains
+            ("mcdonald", "McDonald's"),
+            ("starbucks", "Starbucks"),
+            ("kfc", "KFC"),
+            ("cafe de coral", "Café de Coral"),
+            ("caféde coral", "Café de Coral"),
+            ("fairwood", "Fairwood"),
+            ("maxim", "Maxim's"),
+            ("pacific coffee", "Pacific Coffee"),
+            ("oliver's", "Oliver's"),
+            ("pret a manger", "Pret A Manger"),
+            ("subway", "Subway"),
+            ("pizza hut", "Pizza Hut"),
+            ("burger king", "Burger King"),
+            ("yoshinoya", "Yoshinoya"),
+            ("mak's noodle", "Mak's Noodle"),
+            # Supermarkets / convenience
+            ("7-eleven", "7-Eleven"),
+            ("7eleven", "7-Eleven"),
+            ("wellcome", "Wellcome"),
+            ("park n shop", "Park N Shop"),
+            ("parknshop", "Park N Shop"),
+            ("circle k", "Circle K"),
+            ("watsons", "Watsons"),
+            ("mannings", "Mannings"),
+            ("hktvmall", "HKTVmall"),
+            # Retail
+            ("uniqlo", "Uniqlo"),
+            ("zara", "Zara"),
+            ("h&m", "H&M"),
+            ("ikea", "IKEA"),
+            ("muji", "Muji"),
+            ("log-on", "LOG-ON"),
+            ("logon", "LOG-ON"),
+            ("three sixty", "ThreeSixty"),
+            # Transport
+            ("mtr", "MTR"),
+            ("octopus", "Octopus"),
+            ("uber", "Uber"),
+            ("taxi", "Taxi"),
+            # Online / software
+            ("netflix", "Netflix"),
+            ("spotify", "Spotify"),
+            ("google", "Google"),
+            ("amazon", "Amazon"),
+            ("dropbox", "Dropbox"),
+            ("notion", "Notion"),
+            ("openai", "OpenAI"),
+            ("anthropic", "Anthropic"),
+            ("chatgpt", "ChatGPT"),
+        ]
+        name_lower = name.lower()
+        for pattern, canonical in _BRANDS:
+            if pattern in name_lower:
+                return canonical
+
+        # 3. Strip trailing store/branch numbers (e.g. "WATSONS 0234", "CIRCLE K #042")
+        name = re.sub(r"[\s#\-]+\d{3,}\s*$", "", name).strip()
+
+        # 4. Strip trailing HK district/location codes
+        name = re.sub(
+            r"\s+(HKG|HK|HONGKONG|HONG\s*KONG|CWB|TST|MK|NP|TKO|TW|SKM|KLN|KOWLOON|ADMIRALTY|CENTRAL|WANCHAI|MONGKOK|SHATIN|TAIKOO)\s*$",
+            "", name, flags=re.I,
+        ).strip()
+
+        # 5. Strip trailing .com domain junk (e.g. "NOTION.SO", "SPOTIFY.COM")
+        name = re.sub(r"\.(com|io|so|co|app|net|org)\b.*$", "", name, flags=re.I).strip()
+
+        # 6. Title-case if ALL CAPS
         if name == name.upper() and len(name) > 3:
             name = name.title()
+
         return name
+
+    @app.get("/api/settings")
+    async def api_get_settings():
+        return {
+            "base_currency": storage.get_setting(config, "base_currency", "HKD"),
+        }
+
+    @app.patch("/api/settings")
+    async def api_update_settings(body: dict):
+        allowed = {"base_currency"}
+        for key, value in body.items():
+            if key in allowed:
+                storage.set_setting(config, key, str(value))
+        return {"ok": True}
 
     @app.get("/api/dashboard")
     async def api_dashboard(month: str = ""):
-        # month="" means all-time (the default)
-        EXCLUDE = ('transfer', 'rewards', 'misc')
-        date_filter = f"{month}%" if month else "%"
+        from collections import defaultdict
+
+        base_currency = storage.get_setting(config, "base_currency", "HKD")
+        rates = fx.get_rates(config, base_currency)
+
+        EXCLUDE = ("transfer", "rewards", "misc")
 
         with storage.get_db(config) as conn:
-            # Available months for picker
             available_months = [
                 r[0] for r in conn.execute(
                     "SELECT DISTINCT substr(date,1,7) FROM transactions WHERE date IS NOT NULL ORDER BY 1 DESC"
                 ).fetchall() if r[0]
             ]
-
-            # Total tracked (always all-time)
-            total_spent = conn.execute(
-                "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN (?,?,?)",
-                EXCLUDE
-            ).fetchone()[0] or 0
-
-            # Period spend
-            period_spent = conn.execute(
-                "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN (?,?,?) AND date LIKE ?",
-                (*EXCLUDE, date_filter)
-            ).fetchone()[0] or 0
-
-            # Previous month spend (for delta — only meaningful when a month is selected)
-            prev_spent = 0
-            prev_month = ""
-            if month and len(month) == 7:
-                yr, mo = int(month[:4]), int(month[5:])
-                prev_mo = mo - 1 or 12
-                prev_yr = yr if mo > 1 else yr - 1
-                prev_month = f"{prev_yr:04d}-{prev_mo:02d}"
-                prev_spent = conn.execute(
-                    "SELECT SUM(amount) FROM transactions WHERE direction='expense' AND category NOT IN (?,?,?) AND date LIKE ?",
-                    (*EXCLUDE, f"{prev_month}%")
-                ).fetchone()[0] or 0
-
-            # Category breakdown
-            cats = conn.execute(
-                """SELECT category, SUM(amount) as total, COUNT(*) as count
-                   FROM transactions
-                   WHERE direction='expense' AND category NOT IN (?,?,?) AND date LIKE ?
-                   GROUP BY category ORDER BY total DESC""",
-                (*EXCLUDE, date_filter)
-            ).fetchall()
-
-            # Top merchant per category
-            top_merchants = {}
-            for cat, _, _ in cats:
-                row = conn.execute(
-                    """SELECT merchant, SUM(amount) as s FROM transactions
-                       WHERE category=? AND direction='expense' AND date LIKE ?
-                       GROUP BY merchant ORDER BY s DESC LIMIT 1""",
-                    (cat, date_filter)
-                ).fetchone()
-                if row:
-                    top_merchants[cat] = _clean_merchant(row[0])
-
-            # Recent transactions — filtered to month, excluding transfers
-            recent = conn.execute(
-                """SELECT date, merchant, amount, currency, category, direction
-                   FROM transactions
-                   WHERE category != 'transfer' AND date LIKE ?
-                   ORDER BY date DESC LIMIT 20""",
-                (date_filter,)
-            ).fetchall()
-
-            # Spending trend: monthly totals for last 8 months
-            trend_rows = conn.execute(
-                """SELECT substr(date,1,7) as m, SUM(amount) as total
-                   FROM transactions
-                   WHERE direction='expense' AND category NOT IN (?,?,?) AND date IS NOT NULL
-                   GROUP BY m ORDER BY m DESC LIMIT 8""",
-                EXCLUDE
-            ).fetchall()
-
-            # Counts (all-time)
             doc_count = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
             txn_count = conn.execute(
                 "SELECT COUNT(*) FROM transactions WHERE category != 'transfer'"
             ).fetchone()[0]
+            # Fetch all transactions for Python-level FX aggregation
+            all_rows = conn.execute(
+                "SELECT amount, currency, category, direction, date, merchant FROM transactions WHERE date IS NOT NULL"
+            ).fetchall()
 
-            currency = (conn.execute(
-                "SELECT currency FROM transactions GROUP BY currency ORDER BY COUNT(*) DESC LIMIT 1"
-            ).fetchone() or ["HKD"])[0]
+        def net(amount, currency, direction, category):
+            a = fx.to_base(amount or 0, currency or base_currency, base_currency, rates)
+            if direction == "expense":
+                return a
+            if direction == "income" and category not in ("rent", "rewards"):
+                return -a
+            return 0
 
-        cat_total = sum(r[1] for r in cats) or 1
+        def in_period(date):
+            if not month:
+                return True
+            return (date or "").startswith(month)
+
+        # All-time total (exclude EXCLUDE)
+        total_spent = sum(
+            net(r[0], r[1], r[3], r[2]) for r in all_rows if r[2] not in EXCLUDE
+        )
+
+        # Period rows
+        period_rows = [r for r in all_rows if in_period(r[4])]
+
+        period_spent = sum(
+            net(r[0], r[1], r[3], r[2]) for r in period_rows if r[2] not in EXCLUDE
+        )
+
+        # Previous month
+        prev_spent = 0
+        prev_month = ""
+        if month and len(month) == 7:
+            yr, mo = int(month[:4]), int(month[5:])
+            prev_mo = mo - 1 or 12
+            prev_yr = yr if mo > 1 else yr - 1
+            prev_month = f"{prev_yr:04d}-{prev_mo:02d}"
+            prev_rows = [r for r in all_rows if (r[4] or "").startswith(prev_month)]
+            prev_spent = sum(
+                net(r[0], r[1], r[3], r[2]) for r in prev_rows if r[2] not in EXCLUDE
+            )
+
+        # Category breakdown (period)
+        cat_totals: dict = defaultdict(float)
+        cat_counts: dict = defaultdict(int)
+        cat_merchant_spend: dict = defaultdict(lambda: defaultdict(float))
+        for r in period_rows:
+            if r[2] in EXCLUDE:
+                continue
+            n = net(r[0], r[1], r[3], r[2])
+            if n > 0:
+                cat_totals[r[2]] += n
+                cat_counts[r[2]] += 1
+            if r[3] == "expense":
+                cat_merchant_spend[r[2]][r[5] or ""] += fx.to_base(
+                    r[0] or 0, r[1] or base_currency, base_currency, rates
+                )
+
+        top_merchants = {
+            cat: _clean_merchant(max(merchants, key=merchants.get))
+            for cat, merchants in cat_merchant_spend.items() if merchants
+        }
+        cats = sorted(
+            [(cat, total, cat_counts[cat]) for cat, total in cat_totals.items() if total > 0],
+            key=lambda x: -x[1],
+        )
+        cat_total = sum(c[1] for c in cats) or 1
+
+        # Monthly trend (last 8 months with positive spend)
+        month_totals: dict = defaultdict(float)
+        for r in all_rows:
+            if r[2] not in EXCLUDE and r[4]:
+                month_totals[r[4][:7]] += net(r[0], r[1], r[3], r[2])
+        trend = sorted(
+            [{"month": m, "total": round(t, 2)} for m, t in month_totals.items() if t > 0],
+            key=lambda x: x["month"],
+        )[-8:]
+
+        # Recent (keep original currency for display)
+        recent = sorted(
+            [r for r in period_rows if r[2] != "transfer"],
+            key=lambda r: r[4] or "",
+            reverse=True,
+        )[:20]
+
+        # Flag if data has multiple currencies
+        currencies_in_use = {(r[1] or base_currency).upper() for r in all_rows if r[1]}
+        multi_currency = len(currencies_in_use) > 1
+
         delta_pct = round((period_spent - prev_spent) / prev_spent * 100, 1) if prev_spent else None
 
+        # ── Clarity Score ─────────────────────────────────────────────
+        score_data = score_mod.compute_score(config)
+
+        # ── Action items ──────────────────────────────────────────────
+        from datetime import date as _date, timedelta as _td
+        action_items = []
+
+        # Type 1: Renewals — insurance docs expiring within 60 days
+        expiring = storage.get_expiring_documents(config, days_ahead=60)
+        for doc in expiring[:3]:
+            days = doc["days_remaining"]
+            if days < 0:
+                continue
+            issuer = doc.get("issuer") or doc.get("entity") or "Policy"
+            total = doc.get("total")
+            subtext = f"HKD {total:,.0f} due" if total else f"Expires {doc['expiry_date']}"
+            action_items.append({
+                "type": "renewal",
+                "text": f"{issuer} renews in {days}d",
+                "subtext": subtext,
+                "cta": "URGENT",
+                "days_remaining": days,
+            })
+
+        # Type 2: Upload nudges — missing statement for current or prior month
+        _today = _date.today()
+        _cur_month = _today.strftime("%Y-%m")
+        _prev_month = (_today.replace(day=1) - _td(days=1)).strftime("%Y-%m")
+        _uploaded_months = set(available_months)
+        if _cur_month not in _uploaded_months and _prev_month not in _uploaded_months:
+            action_items.append({
+                "type": "upload",
+                "text": f"Upload {_prev_month} bank statement",
+                "subtext": "Last sync: " + (available_months[0] if available_months else "never"),
+                "cta": "+8 pts",
+            })
+        elif _cur_month not in _uploaded_months and _today.day >= 5:
+            action_items.append({
+                "type": "upload",
+                "text": f"Upload {_cur_month} statement",
+                "subtext": "Keep your picture current",
+                "cta": "+8 pts",
+            })
+
+        # Type 3: AI insights — biggest spending category up >20% vs prior month
+        prior_cat_totals: dict = {}
+        if prev_month:
+            prev_cat_rows = [r for r in all_rows if (r[4] or "").startswith(prev_month)]
+            for r in prev_cat_rows:
+                if r[2] not in EXCLUDE:
+                    n = net(r[0], r[1], r[3], r[2])
+                    if n > 0:
+                        prior_cat_totals[r[2]] = prior_cat_totals.get(r[2], 0) + n
+
+        insight_added = False
+        for r in cats:
+            cat_name, cat_total_val = r[0], r[1]
+            prior = prior_cat_totals.get(cat_name, 0)
+            if prior > 0 and cat_total_val > 0 and not insight_added:
+                pct_change = round((cat_total_val - prior) / prior * 100)
+                if pct_change >= 20:
+                    action_items.append({
+                        "type": "insight",
+                        "text": f"{cat_name.capitalize()} ↑{pct_change}% this month",
+                        "subtext": "Ask AI to break it down",
+                        "cta": "ASK",
+                        "prefill": f"Break down my {cat_name} spending this month",
+                    })
+                    insight_added = True
+
         return {
-            "currency": currency,
+            "base_currency": base_currency,
+            "multi_currency": multi_currency,
             "total_spent": round(total_spent, 2),
             "period_spent": round(period_spent, 2),
             "prev_spent": round(prev_spent, 2),
@@ -345,19 +677,20 @@ def create_app(config: Config) -> FastAPI:
             ],
             "recent": [
                 {
-                    "date": r[0],
-                    "merchant": _clean_merchant(r[1]),
-                    "amount": round(r[2], 2),
-                    "currency": r[3],
-                    "category": r[4],
-                    "direction": r[5],
+                    "date": r[4],
+                    "merchant": _clean_merchant(r[5]),
+                    "amount": round(r[0] or 0, 2),
+                    "currency": r[1] or base_currency,
+                    "category": r[2],
+                    "direction": r[3],
                 }
                 for r in recent
             ],
-            "trend": [
-                {"month": r[0], "total": round(r[1], 2)}
-                for r in reversed(trend_rows)
-            ],
+            "trend": trend,
+            "clarity_score": score_data["score"],
+            "score_delta": score_data["delta"],
+            "score_nudge": score_data["nudge"],
+            "action_items": action_items,
         }
 
     @app.get("/api/transactions/by-category")
@@ -419,31 +752,15 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/api/chat")
     async def api_chat(request: Request):
+        from .intelligence import chat_reply
         body = await request.json()
         msg = (body.get("message") or "").strip()
         if not msg:
             return {"message": ""}
-        docs = storage.get_documents(config, limit=50)
-        context = _build_full_context(docs)
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=config.anthropic_api_key)
-            resp = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=512,
-                system=(
-                    "You are Save My Brain AI, a personal finance assistant. "
-                    "Answer questions using the actual transaction data and document summaries provided. "
-                    "Always use real numbers from the data — never estimate. "
-                    "Format: plain section headers (no # symbols), bullet points starting with '- ', "
-                    "bold key numbers as **HKD X**. Be concise.\n\n"
-                    f"{context or 'No documents yet.'}"
-                ),
-                messages=[{"role": "user", "content": msg}],
-            )
-            return {"message": resp.content[0].text}
-        except Exception as e:
-            return {"message": f"Sorry, I couldn't process that: {e}"}
+        loop = asyncio.get_event_loop()
+        reply = await loop.run_in_executor(None, chat_reply, config, msg)
+        score_mod.record_chat_event(config)
+        return {"message": reply}
 
     # ── End REST API ─────────────────────────────────────────────────────────
 

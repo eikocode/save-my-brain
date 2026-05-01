@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
 import re
@@ -17,6 +18,7 @@ from aiogram.types import (
 from .classifier import classify
 from .config import Config
 from .extractor import ExtractionResult, extract_document
+from .intelligence import chat_reply
 from .renderer import render_pdf_preview, render_summary, render_transactions
 from . import storage
 
@@ -43,20 +45,24 @@ _QUOTES = [
     ("You don't have to be great to start, but you have to start to be great.", "Zig Ziglar"),
 ]
 
-# Tracks last greeting time per user: {user_id: datetime}
-_last_greeted: dict[int, datetime] = {}
-
 _GREETING_INTERVAL_HOURS = 24
 
 
-async def _maybe_greet(message: Message) -> None:
-    """Send a motivational quote if 24 hours have passed since last greeting."""
+async def _maybe_greet(message: Message, config: Config) -> None:
+    """Send a motivational quote if 24 hours have passed since last greeting.
+    Persisted in DB so restarts don't reset the timer."""
     user_id = message.from_user.id
+    key = f"greeted_{user_id}"
     now = datetime.now(timezone.utc)
-    last = _last_greeted.get(user_id)
-    if last and (now - last).total_seconds() < _GREETING_INTERVAL_HOURS * 3600:
-        return
-    _last_greeted[user_id] = now
+    last_str = storage.get_setting(config, key)
+    if last_str:
+        try:
+            last = datetime.fromisoformat(last_str)
+            if (now - last).total_seconds() < _GREETING_INTERVAL_HOURS * 3600:
+                return
+        except ValueError:
+            pass
+    storage.set_setting(config, key, now.isoformat())
     quote, author = random.choice(_QUOTES)
     await message.answer(f'💡 _"{quote}"_\n— {author}', parse_mode="Markdown")
 
@@ -89,7 +95,7 @@ def _delete_keyboard(doc_ids: list[int]) -> InlineKeyboardMarkup:
 
 @router.message(F.document | F.photo)
 async def handle_doc(message: Message, config: Config) -> None:
-    await _maybe_greet(message)
+    await _maybe_greet(message, config)
     if message.document:
         file, fname = message.document, message.document.file_name
     else:
@@ -99,6 +105,17 @@ async def handle_doc(message: Message, config: Config) -> None:
     tf.close()
     tmp_path = Path(tf.name)
     await message.bot.download(file, destination=tmp_path)
+
+    if config.monthly_upload_limit > 0:
+        used = storage.count_uploads_this_month(config)
+        if used >= config.monthly_upload_limit:
+            tmp_path.unlink(missing_ok=True)
+            await message.reply(
+                f"⚠️ *Monthly upload limit reached* ({config.monthly_upload_limit} documents).\n"
+                "Upgrade your plan to upload more this month.",
+                parse_mode="Markdown",
+            )
+            return
 
     h = storage.file_hash(tmp_path)
     if storage.is_duplicate(config, h):
@@ -148,11 +165,30 @@ async def handle_doc(message: Message, config: Config) -> None:
 
     # Auto-detect entity and save immediately — no user input needed
     entity = _entity_from_result(result)
+
+    # Insurance duplicate check: same policy number + same coverage year
+    if result.doc_type == "insurance" and result.reference_number:
+        existing = storage.find_insurance_duplicate(config, result.reference_number, result.coverage_period)
+        if existing:
+            await message.reply(
+                f"⚠️ *Already saved* — Policy `{result.reference_number}` for this coverage period "
+                f"was already recorded (doc ID {existing['id']}).\n\n"
+                f"_This looks like another page of the same policy year. Not saved to avoid double-counting._",
+                parse_mode="Markdown",
+            )
+            return
+
+    safe_total = storage.sanitise_statement_total(result.doc_type, result.total, result.transactions)
     doc_id = storage.save_document(
         config, entity, result.doc_type, result.issuer, result.doc_date,
-        result.currency, result.total, h, fname, result.summary,
+        result.currency, safe_total, h, fname, result.summary,
+        result.reference_number, result.coverage_period,
+        result.holdings,
     )
-    storage.save_transactions(config, doc_id, entity, result.transactions)
+    txns = storage.filter_saveable_transactions(result.doc_type, result.total, result.transactions)
+    if not txns and result.doc_type == "insurance":
+        storage.zero_document_total(config, doc_id)
+    storage.save_transactions(config, doc_id, entity, txns)
 
     await message.reply(
         _saved_text(result, entity, len(result.transactions)),
@@ -168,8 +204,11 @@ async def cb_delete(cq: CallbackQuery, config: Config) -> None:
     except ValueError:
         await cq.answer("Invalid.")
         return
-    storage.delete_document(config, doc_id)
-    await cq.message.edit_text("🗑️ Deleted.")
+    deleted = storage.delete_document(config, doc_id)
+    if deleted:
+        await cq.message.edit_text("🗑️ Deleted — document and all its transactions removed.")
+    else:
+        await cq.message.edit_text("⚠️ Not found — may have already been deleted.")
     await cq.answer()
 
 
@@ -252,8 +291,11 @@ async def cmd_pl(message: Message, config: Config) -> None:
 
 @router.message()
 async def cmd_fallback(message: Message, config: Config) -> None:
-    await _maybe_greet(message)
-    text = message.text or ""
+    await _maybe_greet(message, config)
+    text = (message.text or "").strip()
+
+    if not text:
+        return
 
     # Natural language delete
     if _DELETE_KEYWORDS.search(text):
@@ -270,16 +312,36 @@ async def cmd_fallback(message: Message, config: Config) -> None:
         )
         return
 
-    await message.reply(
-        "📂 *SavemyBrain*\n\n"
-        "Send me any bank statement, receipt, or invoice — I'll read it and save it automatically.\n\n"
-        "*Commands:*\n"
-        "/status — last 10 saved documents\n"
-        "/transactions — full transaction list\n"
-        "/pl — income vs expenses summary\n\n"
-        "_To delete a document, just say \"delete\" and I'll show you what's saved._",
-        parse_mode="Markdown",
-    )
+    # Help keywords — don't consume with AI
+    if text.lower() in {"help", "/help", "?", "hi", "hello"}:
+        await message.reply(
+            "📂 *SavemyBrain*\n\n"
+            "Send me any bank statement, receipt, or invoice — I'll read it and save it.\n\n"
+            "Or just ask me anything about your finances:\n"
+            "_\"How much did I spend on dining last month?\"\n"
+            "\"What's my biggest expense category?\"\n"
+            "\"When does my insurance renew?\"_\n\n"
+            "*Commands:*\n"
+            "/status — last 10 documents\n"
+            "/transactions — full transaction list\n"
+            "/pl — income vs expenses\n\n"
+            "_Say \"delete\" to remove a document._",
+            parse_mode="Markdown",
+        )
+        return
+
+    # Natural language Q&A — route to AI
+    if not storage.get_documents(config, limit=1):
+        await message.reply(
+            "No documents saved yet. Send me a bank statement, receipt, or invoice to get started."
+        )
+        return
+
+    thinking = await message.reply("💭 Thinking…")
+    loop = asyncio.get_event_loop()
+    reply = await loop.run_in_executor(None, chat_reply, config, text)
+    await thinking.delete()
+    await message.reply(reply, parse_mode="Markdown")
 
 
 async def run_bot(config: Config) -> None:

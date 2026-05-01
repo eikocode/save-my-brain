@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Layout from "../components/Layout";
 import { apiFetch } from "../auth";
+import ClarityScore from "../components/dashboard/ClarityScore";
+import SpendingDonut from "../components/dashboard/SpendingDonut";
+import ActionCentre from "../components/dashboard/ActionCentre";
+import StatGrid from "../components/dashboard/StatGrid";
+import TrendBars from "../components/dashboard/TrendBars";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(amount, currency = "HKD") {
-  return `${currency} ${Number(amount).toLocaleString("en-HK", {
+  return `${currency} ${Number(amount).toLocaleString("en-HK", {
     minimumFractionDigits: 0, maximumFractionDigits: 0,
   })}`;
 }
@@ -66,63 +71,6 @@ function MD({ text }) {
 
 function Sk({ h="14px", w="100%", mb="0" }) {
   return <div style={{ height:h, width:w, background:"var(--color-border)", borderRadius:"6px", marginBottom:mb, opacity:0.45 }} />;
-}
-
-// ── Stat tile ─────────────────────────────────────────────────────────────────
-
-function StatTile({ label, value, sub, accent, delta }) {
-  const up = delta > 0;
-  return (
-    <div className="card" style={{ padding:"18px 20px", borderLeft:`3px solid ${accent}` }}>
-      <div style={{ fontSize:"10px", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"var(--color-text-muted)", marginBottom:"6px" }}>
-        {label}
-      </div>
-      <div style={{ fontSize:"22px", fontWeight:800, letterSpacing:"-0.02em", lineHeight:1 }}>
-        {value}
-      </div>
-      <div style={{ display:"flex", alignItems:"center", gap:"6px", marginTop:"5px", flexWrap:"wrap" }}>
-        {sub && <span style={{ fontSize:"11px", color:"var(--color-text-muted)" }}>{sub}</span>}
-        {delta != null && (
-          <span style={{ fontSize:"11px", fontWeight:700, color: up ? "#ef4444":"#10b981" }}>
-            {up ? "↑":"↓"}{Math.abs(delta)}%
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Spending trend ────────────────────────────────────────────────────────────
-
-function Trend({ data, selectedMonth, onSelect, currency }) {
-  if (!data || data.length === 0) return null;
-  const max = Math.max(...data.map(d => d.total)) || 1;
-  return (
-    <div className="card" style={{ padding:"18px 20px", marginBottom:"16px" }}>
-      <div style={{ fontSize:"10px", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"var(--color-text-muted)", marginBottom:"14px" }}>
-        Monthly Spending Trend
-      </div>
-      <div style={{ display:"flex", alignItems:"flex-end", gap:"6px", height:"60px" }}>
-        {data.map(d => {
-          const active = d.month === selectedMonth;
-          const h = Math.max((d.total / max) * 56, 4);
-          return (
-            <div key={d.month} onClick={() => onSelect(active ? "" : d.month)}
-              style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:"4px", cursor:"pointer" }}>
-              <div style={{
-                width:"100%", height:`${h}px`,
-                background: active ? "var(--color-accent)" : "var(--color-border)",
-                borderRadius:"3px 3px 0 0", transition:"background 0.2s, height 0.4s",
-              }} />
-              <div style={{ fontSize:"9px", color: active ? "var(--color-accent)" : "var(--color-text-muted)", fontWeight: active ? 700 : 400, whiteSpace:"nowrap" }}>
-                {fmtMonth(d.month).split(" ")[0]}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 // ── Category row + drill-down ─────────────────────────────────────────────────
@@ -245,7 +193,7 @@ function TxnRow({ t }) {
 
 export default function Home() {
   const [data, setData] = useState(null);
-  const [month, setMonth] = useState(""); // "" = all time
+  const [selectedMonth, setSelectedMonth] = useState(""); // "" = all time
   const [selectedCat, setSelectedCat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -261,9 +209,10 @@ export default function Home() {
   useEffect(() => { load(""); }, [load]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [messages]);
 
-  const handleMonthChange = (m) => { setMonth(m); load(m); };
-
-  const handleCatClick = (name) => setSelectedCat(p => p === name ? null : name);
+  const handleAsk = (prefill) => {
+    setInput(prefill);
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+  };
 
   const sendMessage = async () => {
     const msg = input.trim();
@@ -280,137 +229,150 @@ export default function Home() {
     } finally { setChatLoading(false); }
   };
 
-  const cur = data?.currency || "HKD";
+  const cur = data?.base_currency || "HKD";
+  const multiCurrency = data?.multi_currency || false;
   const loading = data === null;
   const months = data?.available_months || [];
-  const periodLabel = month ? fmtMonth(month) : "All time";
 
   return (
     <Layout>
-      <div style={{ padding:"24px 28px", maxWidth:"920px" }}>
+      <div style={{ padding: "20px 24px", maxWidth: "860px" }}>
 
-        {/* Header */}
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"18px", flexWrap:"wrap", gap:"10px" }}>
-          <h1 style={{ fontSize:"18px", fontWeight:800, margin:0 }}>Overview</h1>
-          <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
-            <select value={month} onChange={e => handleMonthChange(e.target.value)}
-              style={{ padding:"6px 10px", borderRadius:"8px", fontSize:"12px", fontWeight:600, border:"1px solid var(--color-border)", background:"var(--color-surface)", color:"var(--color-text)", cursor:"pointer" }}>
+        {/* ── Header ─────────────────────────────────────────────── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
+          <h1 style={{ fontSize: "18px", fontWeight: 800, margin: 0 }}>Overview</h1>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <select value={selectedMonth} onChange={e => { setSelectedMonth(e.target.value); load(e.target.value); }}
+              style={{ padding: "6px 10px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-text)", cursor: "pointer" }}>
               <option value="">All time</option>
               {months.map(m => <option key={m} value={m}>{fmtMonth(m)}</option>)}
             </select>
             <a href="/api/export/csv" download="savemybrain-transactions.csv"
-              style={{ padding:"6px 12px", borderRadius:"8px", fontSize:"12px", fontWeight:600, background:"var(--color-surface)", border:"1px solid var(--color-border)", color:"var(--color-text)", textDecoration:"none" }}>
+              style={{ padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, background: "var(--color-surface)", border: "1px solid var(--color-border)", color: "var(--color-text)", textDecoration: "none" }}>
               ↓ CSV
             </a>
           </div>
         </div>
 
-        {/* Stat strip */}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(170px, 1fr))", gap:"10px", marginBottom:"16px" }}>
-          {loading ? Array(4).fill(0).map((_,i) => (
-            <div key={i} className="card" style={{ padding:"18px 20px" }}><Sk h="10px" w="55%" mb="8px" /><Sk h="22px" w="70%" /></div>
-          )) : <>
-            <StatTile
-              label={`Spent · ${periodLabel}`}
-              value={fmt(data.period_spent, cur)}
-              sub={data.prev_spent > 0 ? `${fmt(data.prev_spent, cur)} prev` : undefined}
-              accent="var(--color-accent)"
-              delta={data.delta_pct}
-            />
-            <StatTile label="Total tracked" value={fmt(data.total_spent, cur)} sub="all documents" accent="#8b5cf6" />
-            <StatTile label="Documents" value={data.doc_count} sub="files saved" accent="#10b981" />
-            <StatTile label="Transactions" value={data.txn_count} sub="line items" accent="#f59e0b" />
-          </>}
+        {/* ── ROW 1: Score ring + Stat grid ──────────────────────── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "12px", marginBottom: "12px" }}>
+          {loading
+            ? <div className="card" style={{ padding: "16px" }}><Sk h="72px" /></div>
+            : <ClarityScore
+                score={data.clarity_score ?? 0}
+                delta={data.score_delta ?? null}
+                nudge={data.score_nudge ?? ""}
+              />
+          }
+          {loading
+            ? <div className="card" style={{ padding: "16px" }}><Sk h="80px" /></div>
+            : <StatGrid
+                spent={data.period_spent}
+                docCount={data.doc_count}
+                txnCount={data.txn_count}
+                currency={cur}
+                month={selectedMonth}
+                deltaSpentPct={data.delta_pct}
+              />
+          }
         </div>
 
-        {/* Trend bars */}
+        {/* ── ROW 2: Donut + Action Centre ───────────────────────── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+          {loading
+            ? <div className="card" style={{ padding: "14px" }}><Sk h="90px" /></div>
+            : <SpendingDonut
+                categories={data.categories}
+                month={selectedMonth ? fmtMonth(selectedMonth).split(" ")[0] : ""}
+              />
+          }
+          {loading
+            ? <div className="card" style={{ padding: "14px" }}><Sk h="90px" /></div>
+            : <ActionCentre
+                items={data.action_items ?? []}
+                onAsk={handleAsk}
+              />
+          }
+        </div>
+
+        {/* ── ROW 3: Trend bars ──────────────────────────────────── */}
         {!loading && (
-          <Trend data={data.trend} selectedMonth={month} onSelect={handleMonthChange} currency={cur} />
+          <div style={{ marginBottom: "16px" }}>
+            <TrendBars
+              data={data.trend}
+              selectedMonth={selectedMonth}
+              onSelect={(m) => { setSelectedMonth(m); load(m); }}
+            />
+          </div>
         )}
 
-        {/* Two-column: categories + recent */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px", marginBottom:"16px" }}>
-
-          {/* Categories */}
-          <div className="card" style={{ padding:"18px 20px" }}>
-            <div style={{ fontSize:"10px", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"var(--color-text-muted)", marginBottom:"2px" }}>
-              Spending by Category
-            </div>
-            <div style={{ fontSize:"10px", color:"var(--color-text-muted)", marginBottom:"12px" }}>
-              {periodLabel} · tap to see transactions
-            </div>
-            {loading ? Array(5).fill(0).map((_,i) => (
-              <div key={i} style={{ padding:"11px 0", borderBottom:"1px solid var(--color-border)" }}>
-                <Sk h="12px" mb="5px" /><Sk h="3px" mb="3px" /><Sk h="9px" w="35%" />
-              </div>
-            )) : (data.categories || []).length === 0 ? (
-              <div style={{ fontSize:"12px", color:"var(--color-text-muted)", padding:"12px 0" }}>No spending data for this period.</div>
-            ) : (
-              <CategorySection
-                cats={data.categories}
-                selectedCat={selectedCat}
-                onCatClick={handleCatClick}
-                month={month}
-                currency={cur}
-              />
-            )}
+        {/* ── Multi-currency note ─────────────────────────────────── */}
+        {!loading && multiCurrency && (
+          <div style={{ fontSize: "11px", color: "var(--color-text-muted)", marginBottom: "10px", marginTop: "-4px" }}>
+            💱 Totals converted to {cur} · rates updated daily · original currency shown per transaction
           </div>
+        )}
 
-          {/* Recent activity */}
-          <div className="card" style={{ padding:"18px 20px" }}>
-            <div style={{ fontSize:"10px", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"var(--color-text-muted)", marginBottom:"2px" }}>
-              Recent Activity
-            </div>
-            <div style={{ fontSize:"10px", color:"var(--color-text-muted)", marginBottom:"12px" }}>
-              {periodLabel} · transfers excluded
-            </div>
-            {loading ? Array(5).fill(0).map((_,i) => (
-              <div key={i} style={{ padding:"9px 0", borderBottom:"1px solid var(--color-border)" }}>
-                <Sk h="12px" w="70%" mb="5px" /><Sk h="9px" w="40%" />
-              </div>
-            )) : (data.recent || []).length === 0 ? (
-              <div style={{ fontSize:"12px", color:"var(--color-text-muted)", padding:"12px 0" }}>No transactions for this period.</div>
-            ) : (
-              (data.recent || []).map((t,i) => <TxnRow key={i} t={t} />)
-            )}
+        {/* ── Below fold: Category breakdown ─────────────────────── */}
+        <div className="card" style={{ padding: "18px 20px", marginBottom: "14px" }}>
+          <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-muted)", marginBottom: "2px" }}>
+            Spending by Category
           </div>
+          <div style={{ fontSize: "10px", color: "var(--color-text-muted)", marginBottom: "12px" }}>
+            {selectedMonth ? fmtMonth(selectedMonth) : "All time"} · tap to see transactions
+          </div>
+          {loading ? Array(4).fill(0).map((_, i) => (
+            <div key={i} style={{ padding: "11px 0", borderBottom: "1px solid var(--color-border)" }}>
+              <Sk h="12px" mb="5px" /><Sk h="3px" mb="3px" /><Sk h="9px" w="35%" />
+            </div>
+          )) : (data.categories || []).length === 0 ? (
+            <div style={{ fontSize: "12px", color: "var(--color-text-muted)", padding: "12px 0" }}>No spending data for this period.</div>
+          ) : (
+            <CategorySection
+              cats={data.categories}
+              selectedCat={selectedCat}
+              onCatClick={name => setSelectedCat(p => p === name ? null : name)}
+              month={selectedMonth}
+              currency={cur}
+            />
+          )}
         </div>
 
-        {/* Ask AI */}
-        <div className="card" style={{ padding:"18px 20px" }}>
-          <div style={{ fontSize:"10px", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", color:"var(--color-text-muted)", marginBottom:"2px" }}>Ask AI</div>
-          <div style={{ fontSize:"10px", color:"var(--color-text-muted)", marginBottom:"12px" }}>
-            "How much on dining in Feb?" · "When does my insurance renew?" · "Biggest single purchase?"
+        {/* ── Ask AI ─────────────────────────────────────────────── */}
+        <div className="card" style={{ padding: "18px 20px" }}>
+          <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-muted)", marginBottom: "2px" }}>Ask AI</div>
+          <div style={{ fontSize: "10px", color: "var(--color-text-muted)", marginBottom: "12px" }}>
+            "How much on dining last month?" · "When does my insurance renew?" · "Biggest purchase?"
           </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:"8px", marginBottom:"10px", maxHeight:"240px", overflowY:"auto" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "10px", maxHeight: "240px", overflowY: "auto" }}>
             {messages.length === 0 && (
-              <div style={{ color:"var(--color-text-muted)", fontSize:"12px", fontStyle:"italic" }}>Ask anything about your spending above.</div>
+              <div style={{ color: "var(--color-text-muted)", fontSize: "12px", fontStyle: "italic" }}>Ask anything about your spending above.</div>
             )}
-            {messages.map((m,i) => (
+            {messages.map((m, i) => (
               <div key={i} style={{
-                alignSelf: m.role==="user" ? "flex-end":"flex-start", maxWidth:"82%",
-                background: m.role==="user" ? "var(--color-accent)":"var(--color-surface)",
-                color: m.role==="user" ? "white":"var(--color-text)",
-                borderRadius: m.role==="user" ? "14px 14px 4px 14px":"14px 14px 14px 4px",
-                padding:"9px 13px", fontSize:"13px", lineHeight:1.6,
-                border: m.role==="ai" ? "1px solid var(--color-border)":"none",
+                alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "82%",
+                background: m.role === "user" ? "var(--color-accent)" : "var(--color-surface)",
+                color: m.role === "user" ? "white" : "var(--color-text)",
+                borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                padding: "9px 13px", fontSize: "13px", lineHeight: 1.6,
+                border: m.role === "ai" ? "1px solid var(--color-border)" : "none",
               }}>
-                {m.role==="ai" ? <MD text={m.text} /> : m.text}
+                {m.role === "ai" ? <MD text={m.text} /> : m.text}
               </div>
             ))}
             {chatLoading && (
-              <div style={{ alignSelf:"flex-start", background:"var(--color-surface)", border:"1px solid var(--color-border)", borderRadius:"14px 14px 14px 4px", padding:"9px 13px", fontSize:"13px", color:"var(--color-text-muted)" }}>
+              <div style={{ alignSelf: "flex-start", background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "14px 14px 14px 4px", padding: "9px 13px", fontSize: "13px", color: "var(--color-text-muted)" }}>
                 Thinking…
               </div>
             )}
             <div ref={bottomRef} />
           </div>
-          <div style={{ display:"flex", gap:"8px" }}>
-            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key==="Enter" && sendMessage()}
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendMessage()}
               placeholder="Ask about your spending…"
-              style={{ flex:1, padding:"8px 12px", borderRadius:"8px", border:"1px solid var(--color-border)", background:"var(--color-bg)", color:"var(--color-text)", fontSize:"13px", outline:"none" }} />
+              style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--color-border)", background: "var(--color-bg)", color: "var(--color-text)", fontSize: "13px", outline: "none" }} />
             <button className="btn-primary" onClick={sendMessage} disabled={chatLoading || !input.trim()}
-              style={{ padding:"8px 16px", borderRadius:"8px", fontSize:"13px" }}>Send</button>
+              style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "13px" }}>Send</button>
           </div>
         </div>
 

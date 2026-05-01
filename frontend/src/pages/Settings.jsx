@@ -18,6 +18,7 @@ export default function Settings() {
   const [user, setUser] = useState(null);
   const [familyMembers, setFamilyMembers] = useState([]);
   const [billingStatus, setBillingStatus] = useState(null);
+  const [baseCurrency, setBaseCurrency] = useState("HKD");
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(true);
   const localUser = getUser();
@@ -39,10 +40,12 @@ export default function Settings() {
       apiFetch("/api/users/me").then(r => r.json()).catch(() => null),
       apiFetch("/api/users/family-members").then(r => r.json()).catch(() => []),
       apiFetch("/api/billing/status").then(r => r.json()).catch(() => null),
-    ]).then(([userData, members, billing]) => {
+      apiFetch("/api/settings").then(r => r.json()).catch(() => null),
+    ]).then(([userData, members, billing, settings]) => {
       setUser(userData);
       setFamilyMembers(Array.isArray(members) ? members : []);
       setBillingStatus(billing);
+      if (settings?.base_currency) setBaseCurrency(settings.base_currency);
       setLoading(false);
     });
   }, []);
@@ -60,6 +63,39 @@ export default function Settings() {
 
   const nonSelf = familyMembers.filter(m => m.relationship !== "self");
   const displayUser = user || localUser;
+
+  const CURRENCIES = [
+    ["HKD", "HKD — Hong Kong Dollar"],
+    ["USD", "USD — US Dollar"],
+    ["EUR", "EUR — Euro"],
+    ["GBP", "GBP — British Pound"],
+    ["JPY", "JPY — Japanese Yen"],
+    ["CAD", "CAD — Canadian Dollar"],
+    ["AUD", "AUD — Australian Dollar"],
+    ["SGD", "SGD — Singapore Dollar"],
+    ["TWD", "TWD — Taiwan Dollar"],
+    ["CNY", "CNY — Chinese Yuan"],
+    ["CHF", "CHF — Swiss Franc"],
+    ["NZD", "NZD — New Zealand Dollar"],
+    ["KRW", "KRW — Korean Won"],
+    ["THB", "THB — Thai Baht"],
+    ["MYR", "MYR — Malaysian Ringgit"],
+    ["PHP", "PHP — Philippine Peso"],
+    ["INR", "INR — Indian Rupee"],
+    ["IDR", "IDR — Indonesian Rupiah"],
+  ];
+
+  const handleSaveCurrency = async () => {
+    try {
+      await apiFetch("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ base_currency: baseCurrency }),
+      });
+      showToast("Base currency saved. Dashboard will refresh on next load.");
+    } catch {
+      showToast("Could not save currency setting.", "warning");
+    }
+  };
 
   const handleUpgrade = async (plan) => {
     try {
@@ -195,6 +231,36 @@ export default function Settings() {
               </div>
             </div>
           </div>
+        </section>
+
+        {/* Base Currency */}
+        <section className="card" style={{ padding: "24px", marginBottom: "24px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "4px" }}>💱 Base Currency</h2>
+          <p style={{ fontSize: "13px", color: "var(--color-text-muted)", marginBottom: "16px" }}>
+            All dashboard totals are converted to this currency. Individual transactions still show their original currency.
+          </p>
+          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            <select
+              value={baseCurrency}
+              onChange={e => setBaseCurrency(e.target.value)}
+              style={{
+                flex: 1, padding: "8px 12px", borderRadius: "8px", fontSize: "13px",
+                border: "1px solid var(--color-border)", background: "var(--color-bg)",
+                color: "var(--color-text)", cursor: "pointer",
+              }}
+            >
+              {CURRENCIES.map(([code, label]) => (
+                <option key={code} value={code}>{label}</option>
+              ))}
+            </select>
+            <button className="btn-primary" onClick={handleSaveCurrency}
+              style={{ padding: "8px 18px", borderRadius: "8px", fontSize: "13px", whiteSpace: "nowrap" }}>
+              Save
+            </button>
+          </div>
+          <p style={{ fontSize: "11px", color: "var(--color-text-muted)", marginTop: "10px" }}>
+            Exchange rates are fetched daily from the European Central Bank via frankfurter.app. Unknown currencies are left unconverted.
+          </p>
         </section>
 
         {/* Connections (future) */}

@@ -29,49 +29,72 @@
     "logout": "Log Out"
   },
   "landing": {
-    "pill": "Free trial · No credit card required",
-    "headline": "Save your Brain from Life Admin",
-    "tagline": "Leave the boring bits to AI.",
-    "sub": "Drop invoices, receipts, contracts, and bank statements into Telegram, your browser, or your cloud drive. AI reads, organises, and answers — so you can focus on what actually grows your business.",
-    "cta": "Open on Telegram ✈️",
-    "qr_label": "📱 Scan with your phone",
+    "pill": "14-day free trial · No credit card required",
+    "headline": "You're not bad with money.\nYou just can't see it.",
+    "tagline": "Upload your bank statements, credit cards, and insurance docs. AI reads everything and tells you exactly where your money goes.",
+    "sub": "Most people aren't bad with money — they just have no visibility. No spreadsheets. No bank logins. Drop your documents and ask anything.",
+    "cta": "Start Free — No Card Needed",
+    "cta_telegram": "Open on Telegram ✈️",
+    "qr_label": "📱 Scan to start on Telegram",
     "metrics": {
       "docs": "500+",
       "docs_label": "Documents Processed",
-      "types": "15",
-      "types_label": "Document Types",
-      "speed": "3s",
-      "speed_label": "Processing Time"
+      "types": "10+",
+      "types_label": "HK Document Types",
+      "speed": "< 5s",
+      "speed_label": "Per Document"
     },
     "how_title": "How it works",
     "how_sub": "Three steps. That's it.",
     "steps": [
-      { "emoji": "📎", "title": "Upload your way", "desc": "Send via Telegram, drag & drop in the browser, or connect Google Drive, Dropbox, or OneDrive." },
-      { "emoji": "🧠", "title": "AI Reads", "desc": "Extracts amounts, vendors, dates, and red flags automatically." },
-      { "emoji": "💬", "title": "Ask Anything", "desc": "\"What did I pay my accountant last quarter?\" — instant answer." }
+      { "emoji": "📎", "title": "Drop your documents", "desc": "Send via Telegram or drag & drop in the browser. PDFs, photos, bank statements, insurance policies — all accepted." },
+      { "emoji": "🧠", "title": "AI reads everything", "desc": "Extracts transactions, amounts, dates, merchant names, and policy details. Understands HSBC, Hang Seng, AIA, FWD, and all major HK issuers." },
+      { "emoji": "💬", "title": "Ask anything, anytime", "desc": "\"How much did I spend on dining last month?\" \"When does my AIA policy renew?\" — instant answers on Telegram or web." }
     ],
-    "features_title": "What your AI handles",
+    "features_title": "Finally know where it all goes",
     "features": [
-      { "emoji": "📂", "title": "Upload anything", "desc": "Invoices, receipts, contracts, bank statements — we read it all." },
-      { "emoji": "🧾", "title": "Expense tracking", "desc": "Every transaction logged and categorised automatically. Tax time sorted." },
-      { "emoji": "🔔", "title": "Smart alerts", "desc": "Renewal deadlines, payment due dates — never miss one." },
-      { "emoji": "☁️", "title": "Connect your cloud", "desc": "Link Google Drive, Dropbox, or OneDrive. Any file you save there gets processed automatically." },
-      { "emoji": "💬", "title": "Telegram + Web chat", "desc": "Ask questions, search your documents, and get instant answers — on Telegram or from any browser." },
-      { "emoji": "🔒", "title": "Privacy-first", "desc": "Documents processed then deleted. Never sold, never shared." }
+      { "emoji": "🏦", "title": "Bank & credit card statements", "desc": "Every transaction extracted, categorised, and searchable. HSBC, Hang Seng, BOC, Standard Chartered, BEA, DBS, Citibank, ZA Bank, Mox, WeLab — and more." },
+      { "emoji": "🛡️", "title": "Insurance policy tracking", "desc": "AIA, Manulife, FWD, Prudential, HSBC Life, Sun Life, AXA, BOC Life, China Life, China Taiping, Chubb, Bowtie, Blue Cross — upload any policy, track every renewal." },
+      { "emoji": "📊", "title": "Spending breakdown", "desc": "See exactly where your money goes: dining, travel, investment, insurance. No more guessing." },
+      { "emoji": "💬", "title": "Natural language Q&A", "desc": "Ask in plain English or Chinese. Get answers from your actual data — not estimates." },
+      { "emoji": "📱", "title": "Telegram-first", "desc": "Upload from your phone, ask questions on the go, get alerts when policies are due. No app download needed." },
+      { "emoji": "🔒", "title": "Private by design", "desc": "Your files are deleted immediately after processing. We never store your documents — only the numbers that matter." }
     ],
-    "who_title": "Built for solo operators",
+    "who_title": "Built for busy people in HK",
     "personas": [
-      { "emoji": "🧑‍💻", "title": "Solo founder", "desc": "One person, every hat. Let AI take the paperwork off your plate." },
-      { "emoji": "🧾", "title": "Freelancer", "desc": "Track invoices, contracts, and client payments without a spreadsheet." },
-      { "emoji": "🏪", "title": "Small business owner", "desc": "Vendors, receipts, renewals — one brain handles it all." }
+      { "emoji": "💼", "title": "Solo founder", "desc": "Running a company solo means every document lands on your desk. Let AI handle the reading." },
+      { "emoji": "🏠", "title": "Head of household", "desc": "Managing bills, insurance, and bank statements for the whole family? One place for everything — so nothing slips through the cracks." },
+      { "emoji": "📈", "title": "Active investor", "desc": "Futu, Tiger Brokers, Interactive Brokers, HSBC InvestDirect, BOCI Securities — upload your brokerage and MPF statements. See everything in one place." }
     ],
-    "pricing_title": "Simple, honest pricing",
-    "pricing_trial": { "name": "Free Trial", "price": "Free", "duration": "7 days", "docs": "3 documents", "features": ["All document processing", "Smart alerts", "Chat Q&A"] },
-    "pricing_annual": { "name": "Annual", "price": "US$79", "duration": "/year", "docs": "Unlimited documents", "features": ["Everything in Trial", "Unlimited uploads", "Cloud drive sync (Google Drive, Dropbox, OneDrive)", "Email + Telegram alerts", "Priority support"] },
-    "pricing_lifetime": { "name": "Lifetime", "price": "US$200", "duration": "one-time", "docs": "Unlimited forever", "badge": "Best Value", "features": ["Everything in Annual", "Web chat interface", "All future features", "Pay once, done"] },
-    "pricing_cta": "Start Free on Telegram",
-    "bottom_headline": "Ready to save your brain?",
-    "bottom_sub": "7-day free trial. No credit card required.",
+    "privacy_title": "Your documents never stay with us",
+    "privacy_subtitle": "Privacy isn't a feature. It's the default.",
+    "privacy_items": [
+      { "icon": "🗑️", "title": "Files deleted after processing", "desc": "The moment we finish reading your document, the original file is permanently deleted from our servers. We never store PDFs or photos — not even temporarily backed up." },
+      { "icon": "📌", "title": "We only extract what matters", "desc": "From each document, we extract: transaction dates, amounts, merchant names, document type, and policy details. We do not read or retain your address, ID numbers, or anything else." },
+      { "icon": "🔒", "title": "Encrypted in transit", "desc": "All communication between your device and our server uses HTTPS. Your documents and data are never sent over an unencrypted connection." },
+      { "icon": "🚫", "title": "Never sold, never shared", "desc": "Your financial data is yours. We do not sell it, share it with advertisers, or use it to train AI models. Ever." }
+    ],
+    "pricing_title": "One plan. Full access.",
+    "pricing_trial": {
+      "name": "Free Trial",
+      "price": "Free",
+      "duration": "14 days",
+      "docs": "Unlimited documents",
+      "features": ["Full document processing", "Bank, insurance & investment docs", "Natural language Q&A", "Telegram bot + web interface", "No credit card required"]
+    },
+    "pricing_personal": {
+      "name": "Personal",
+      "price": "HKD 68",
+      "duration": "/month",
+      "docs": "Unlimited documents",
+      "badge": "Most popular",
+      "features": ["Everything in Free Trial", "Unlimited uploads", "Spending analytics", "Policy renewal alerts", "Priority AI processing", "Cancel anytime"]
+    },
+    "pricing_cta_trial": "Start Free Trial",
+    "pricing_cta_paid": "Start Free, Then Upgrade",
+    "pricing_note": "After your 14-day trial, continue for HKD 68/month. Cancel anytime.",
+    "bottom_headline": "You don't need a financial advisor.\nYou need visibility.",
+    "bottom_sub": "14-day free trial. No credit card. No bank logins.",
     "footer_company": "Santo Star Limited",
     "footer_privacy": "Privacy Policy",
     "footer_bot": "Telegram Bot"
@@ -164,7 +187,7 @@
     "sections": {
       "collect": { "title": "What we collect", "body": "We collect: your name, email address, and Telegram ID (for account setup); documents you upload (PDFs, images, emails); calendar event metadata if you connect Google/Apple Calendar or Calendly; task and note data you enter; AI-generated summaries of your documents." },
       "process": { "title": "How we process your documents", "body": "When you upload a document, we send its contents to Claude AI (by Anthropic) to generate a plain-language summary. After processing, the original file is deleted from our servers. We store only the AI-generated summary. We do not store your originals after processing is complete." },
-      "ai": { "title": "AI and third parties", "body": "We use Claude AI (Anthropic) to process documents and answer your questions. Your document contents are sent to Anthropic's API for this processing. Anthropic's API does not use your data to train models. We do not use any other third-party AI services. We use Stripe for payment processing (they store payment details — we never see your card number). We do not use advertising networks or analytics services." },
+      "ai": { "title": "AI and third parties", "body": "We use Claude AI (Anthropic) to process documents and answer your questions. Your document text is sent to Anthropic's API for this purpose. Anthropic's API does not use your data to train models — see Anthropic's privacy policy for details. We do not use any other third-party AI services. We do not use advertising networks or analytics services." },
       "groups": { "title": "Groups and sharing", "body": "If you join a group, your group administrator can see: the number of documents you've uploaded, task status, and AI-generated summaries of your documents. They cannot see your original document files. Before joining a group, you will be shown exactly what your admin can access and asked to confirm." },
       "retention": { "title": "Data retention and deletion", "body": "You can delete your account at any time from Settings → Account → Delete Account. This permanently deletes: all summaries, all tasks and notes, all calendar connections, and your profile. Deletion is immediate and irreversible. We retain anonymised aggregate statistics (total documents processed) but these cannot be linked back to you." },
       "rights": { "title": "Your rights", "body": "Under Hong Kong's Personal Data (Privacy) Ordinance (PDPO) and Japan's Act on Protection of Personal Information (APPI), you have the right to: access all personal data we hold about you, correct inaccurate data, request deletion of your data, and object to processing. To exercise these rights, contact: privacy@santostar.com" },
